@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
 """
-Advent of Code 2025, 
+Advent of Code 2025, Day 1: Secret Entrance
 
-
+Moving in circles, modulo 100
 
 Ed Karrels, ed.karrels@gmail.com, December 2025
 """
@@ -19,6 +19,9 @@ from advent import *
 
 
 def part1(input):
+    """
+    Count when the dial lands on 0 after a turn left or right.
+    """
     p = 50
     zeros = 0
     for line in input:
@@ -31,6 +34,10 @@ def part1(input):
 
 
 def part2(input):
+    """
+    Count every time the dial lands on zero or passes through it.
+    This is a dumb way to do it, but it's good enough.
+    """
     p = 50
     zeros = 0
     for line in input:
@@ -43,24 +50,6 @@ def part2(input):
             if p == 0: zeros += 1
     print(zeros)
 
-
-"""
-        p = p + sign*dist
-        print(f'{line} {p}')
-        if p == 0:
-            print('  at zero')
-            zeros += 1
-        else:
-            while p >= 100:
-                p -= 100
-                zeros += 1
-                print(f'  -> {p}')
-            while p < 0:
-                p += 100
-                zeros += 1
-                print(f'  -> {p}')
-
-"""
 
 if __name__ == '__main__':
     # read input as a list of strings
