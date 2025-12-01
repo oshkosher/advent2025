@@ -33,7 +33,7 @@ def part1(input):
     print(zeros)
 
 
-def part2(input):
+def part2_simple(input):
     """
     Count every time the dial lands on zero or passes through it.
     This is a dumb way to do it, but it's good enough.
@@ -51,9 +51,35 @@ def part2(input):
     print(zeros)
 
 
+def part2(input):
+    """
+    Count every time the dial lands on zero or passes through it.
+    """
+    p = 50
+    zeros = 0
+    for line in input:
+        assert 0 <= p < 100
+        dist = int(line[1:])
+
+        # when moving left, invert the math
+        if line[0] == 'L' and p > 0:
+            p = 100-p
+            
+        p += dist
+        if p >= 100:
+            zeros += p // 100
+            p %= 100
+
+        if line[0] == 'L' and p > 0:
+            p = 100-p
+        
+    print(zeros)
+
+
 if __name__ == '__main__':
     # read input as a list of strings
     input = read_problem_input()
   
     part1(input)
+    # part2_simple(input)
     part2(input)
