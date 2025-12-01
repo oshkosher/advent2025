@@ -2,8 +2,8 @@
 
 """
 Common code for Advent of Code puzzles.
-Note that the directions are incompatible with 2023/common.py, 
-where the directions are 1-based (North==1).
+
+Ed Karrels, ed.karrels@gmail.com, December 2025
 
 input_filename() - figure out name of input file based on sys.argv[1]
 read_problem_input(filename=None) - read input into list of strings, no newlines
@@ -27,7 +27,7 @@ sparse_to_grid(sparse_grid, empty='.', lists=False) - convert to dense grid
 movep(pos, d, count=1) - move 2-list pos [r,c] in direction d
   direction 0=North, 1=East, 2=South, 3=West
 move(r, c, d, count=1) - return (r,c) moved in direction d
-dir_inv(d) - given direction, return the opposite direction
+dir_inv(d) - given a direction, return the opposite direction
 right_turn(d) - return direction 90 to the right
 left_turn(d) - 90 left
 turn_angle(prev, dir) - compute direction difference, -90, 0, 90, or 180
@@ -112,7 +112,7 @@ def read_problem_input(filename = None):
     return lines
 
 
-def read_grid(inf, split_rows_into_lists = False):
+def grid_read(inf, split_rows_into_lists = False):
     """
     Read a 2-d grid.
     inf can be either a filename or input stream.
@@ -141,7 +141,7 @@ def read_grid(inf, split_rows_into_lists = False):
     return rows
 
 
-def create_grid(row_count, col_count, split_rows_into_lists=False, fill='.'):
+def grid_create(row_count, col_count, split_rows_into_lists=False, fill='.'):
     """
     Create an empty grid with (row_count) rows and (col_count) columns.
     If (split_rows_into_lists) is true, then each row is a list, otherwise
@@ -155,13 +155,13 @@ def create_grid(row_count, col_count, split_rows_into_lists=False, fill='.'):
 
 def grid_get(grid, coord):
     """
-    Use 2-tuple coordinate to read a cell from the grid.
+    Use 2-tuple coordinate (row,col) to read a cell from the grid.
     This works if grid is a list of strings or a list of lists.
     """
     return grid[coord[0]][coord[1]]
 
 
-def paste_grid(dest_grid, dest_row, dest_col, src_grid):
+def grid_paste(dest_grid, dest_row, dest_col, src_grid):
     """
     Copy one grid onto another grid.
     This works if the source and destination grids are lists of strings or
@@ -190,6 +190,9 @@ def paste_grid(dest_grid, dest_row, dest_col, src_grid):
 
 
 def grid_add_border(grid, border_width=1, fill='.'):
+    """
+    Add a border of (border_width) rows and columns around a grid. A new grid is returned.
+    """
     is_string = isinstance(grid[0], str)
     padded = create_grid(len(grid) + border_width*2,
                         len(grid[0]) + border_width*2,
@@ -210,7 +213,7 @@ def grid_row_to_string(row):
         return row
   
 
-def print_grid(grid):
+def grid_print(grid):
     """
     Print a grid to stdout.
     """
@@ -274,14 +277,13 @@ def grid_count_set_neighbors(grid, r, c, value = '#'):
         if c+1 < width and grid[r+1][c+1] == value: count += 1
   
     return count
-    
 
 
 def grid_deep_copy(grid):
     return [r.copy() for r in grid]
 
 
-def sparse_read(input, empty='.'):
+def grid_read_sparse(input, empty='.'):
     """
     Read a grid from a file (or list of strings) and return a dictionary of
     all the cells that are not empty. (row,col): character
@@ -320,10 +322,12 @@ def sparse_size(sparse_grid):
             max_c = max(max_c, c)
     return (min_r, max_r - min_r + 1,
             min_c, max_c - min_c + 1)
-            
 
 
 def sparse_to_grid(sparse_grid, empty='.', split_rows_into_lists=False):
+    """
+    Given a sparse grid, fill in a dense grid.
+    """
     (min_row, height, min_col, width) = sparse_size(sparse_grid)
 
     def makeRow(r):
@@ -336,7 +340,7 @@ def sparse_to_grid(sparse_grid, empty='.', split_rows_into_lists=False):
     return [makeRow(r) for r in range(min_row, min_row + height)]
 
         
-def testSparseRead():
+def test_sparse_read():
     input = ['.#.', '.x.', 'S..']
     s = sparse_read(input)
     print(repr(s))
