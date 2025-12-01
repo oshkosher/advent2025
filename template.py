@@ -31,7 +31,7 @@ if __name__ == '__main__':
     input = read_problem_input()
 
     # read input as a Grid object, where each 
-    # grid = read_grid(input_filename(), True)
+    # grid = grid_read(input_filename(), True)
   
     part1(input)
     part2(input)
