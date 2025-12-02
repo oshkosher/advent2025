@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
+# install this as pillow: "python -m pip install Pillow"
 from PIL import Image, ImageDraw
 from advent import read_grid
 
