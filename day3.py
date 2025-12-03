@@ -20,6 +20,9 @@ from advent import *
 
 def max_joltage(digits, n_digits):
     """
+    Given a list of digits, choose n_digits of them, in order,
+    yielding a number with the maxiumum value. Return that number.
+    
     A greedy algorithm is sufficient for this.
     At each step, choose the highest digit in the available range.
     
