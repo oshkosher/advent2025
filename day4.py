@@ -86,11 +86,11 @@ def part2_dumb(input):
                     progress = True
 
     print(n_removed)
-    
 
 
 if __name__ == '__main__':
-    # read input as a Grid object, where each 
+    # read input as a Grid object, where each row is a list so cells
+    # can be modified
     grid = grid_read(input_filename(), True)
 
     part1(grid)
