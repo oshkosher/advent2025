@@ -18,6 +18,7 @@ print_grid(grid) - print grid to stdout
 grid_to_string(grid) - make grid into one big string
 grid_search(grid, target) - return (r,c) where grid[r][c]==target
 grid_count(grid, target) - count number of copies of target
+grid_nb8(grid, r, c) - iterable 8 neighbors, with range check
 grid_count_set_neighbors(grid, r, c, value = '#')
   count neighbors (including diagonals) with this value
 grid_deep_copy(grid) - make a copy
@@ -254,7 +255,7 @@ def grid_count(grid, target):
     return n
 
 
-def grid_enumerate_neighbors_8(grid, r, c):
+def grid_nb8(grid, r, c):
     """
     Returns iterable of (r,c) coordinates of all neighbors which
     are within bounds of the grid. This includes diagonals such
@@ -264,18 +265,21 @@ def grid_enumerate_neighbors_8(grid, r, c):
     width = len(grid[0])
     # assert(0 <= r < height and 0 <= col < width)
 
+    not_left = (c > 0)
+    not_right = (c+1 < width)
+
     if r > 0:
-        if c > 0: yield r-1, c-1
+        if not_left: yield r-1, c-1
         yield r-1, c
-        if c+1 < width: yield r-1, c+1
+        if not_right: yield r-1, c+1
       
-    if c > 0: yield r, c-1
-    if c+1 < width: yield r, c+1
+    if not_left: yield r, c-1
+    if not_right: yield r, c+1
     
     if r+1 < height:
-        if c > 0: yield r+1, c-1
+        if not_left: yield r+1, c-1
         yield r+1, c
-        if c+1 < width: yield r+1, c+1
+        if not_right: yield r+1, c+1
 
 
 def grid_count_set_neighbors(grid, r, c, value = '#'):
@@ -285,7 +289,7 @@ def grid_count_set_neighbors(grid, r, c, value = '#'):
     """
     
     count = 0
-    for r1, c1 in grid_enumerate_neighbors_8(grid, r, c):
+    for r1, c1 in grid_nb8(grid, r, c):
         if grid[r1][c1] == value:
             count += 1
   

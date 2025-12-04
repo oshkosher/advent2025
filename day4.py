@@ -37,7 +37,7 @@ def q_neighbors(todo, grid, r, c):
     """
     Add all the nonempty neighbors of (r,c) to the todo set
     """
-    for r, c in grid_enumerate_neighbors_8(grid, r, c):
+    for r, c in grid_nb8(grid, r, c):
         if grid[r][c] == '@':
             todo.add((r,c))
         
