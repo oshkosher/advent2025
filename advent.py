@@ -254,27 +254,40 @@ def grid_count(grid, target):
     return n
 
 
+def grid_enumerate_neighbors_8(grid, r, c):
+    """
+    Returns iterable of (r,c) coordinates of all neighbors which
+    are within bounds of the grid. This includes diagonals such
+    as (r-1, c+1).
+    """
+    height = len(grid)
+    width = len(grid[0])
+    # assert(0 <= r < height and 0 <= col < width)
+
+    if r > 0:
+        if c > 0: yield r-1, c-1
+        yield r-1, c
+        if c+1 < width: yield r-1, c+1
+      
+    if c > 0: yield r, c-1
+    if c+1 < width: yield r, c+1
+    
+    if r+1 < height:
+        if c > 0: yield r+1, c-1
+        yield r+1, c
+        if c+1 < width: yield r+1, c+1
+
+
 def grid_count_set_neighbors(grid, r, c, value = '#'):
     """
     Of the 8 neighboring cells from (r,c), this returns the number
     whose value is (value).
     """
-    height = len(grid)
-    width = len(grid[0])
-    # assert(0 <= r < height and 0 <= col < width)
-    count = 0
-    if r > 0:
-        if c > 0 and grid[r-1][c-1] == value: count += 1
-        if grid[r-1][c] == value: count += 1
-        if c+1 < width and grid[r-1][c+1] == value: count += 1
-      
-    if c > 0 and grid[r][c-1] == value: count += 1
-    if c+1 < width and grid[r][c+1] == value: count += 1
     
-    if r+1 < height:
-        if c > 0 and grid[r+1][c-1] == value: count += 1
-        if grid[r+1][c] == value: count += 1
-        if c+1 < width and grid[r+1][c+1] == value: count += 1
+    count = 0
+    for r1, c1 in grid_enumerate_neighbors_8(grid, r, c):
+        if grid[r1][c1] == value:
+            count += 1
   
     return count
 

@@ -3,7 +3,7 @@
 """
 Advent of Code 2025, Day 4: Printing Department
 
-
+Repeated grid neighbor counting
 
 Ed Karrels, ed.karrels@gmail.com, December 2025
 """
@@ -34,27 +34,21 @@ def part1(grid):
 
 
 def q_neighbors(todo, grid, r, c):
-    height = len(grid)
-    width = len(grid[0])
-    
-    if r > 0:
-        if c > 0: todo.add((r-1,c-1))
-        todo.add((r-1,c))
-        if c+1 < width: todo.add((r-1,c+1))
-            
-    if c > 0: todo.add((r,c-1))
-    if c+1 < width: todo.add((r,c+1))
-    
-    if r+1 < height:
-        if c > 0: todo.add((r+1,c-1))
-        todo.add((r+1,c))
-        if c+1 < width: todo.add((r+1,c+1))
+    """
+    Add all the nonempty neighbors of (r,c) to the todo set
+    """
+    for r, c in grid_enumerate_neighbors_8(grid, r, c):
+        if grid[r][c] == '@':
+            todo.add((r,c))
         
 
 def part2(input):
     todo = set()
-
     n_removed = 0
+
+    # first pass: test everyone
+    # When a cell is removed, add its neighbors to the todo list
+    # to be rescanned.
     for r in range(len(grid)):
         for c in range(len(grid[0])):
             if is_movable(grid, r, c):
@@ -63,24 +57,45 @@ def part2(input):
                 q_neighbors(todo, grid, r, c)
 
     while len(todo) > 0:
+        # pull one off the todo list, see if it can be removed
         r, c = todo.pop()
         if is_movable(grid, r, c):
             grid[r][c] = '.'
             n_removed += 1
-            if n_removed % 1000 == 0:
-                print(f'...{n_removed}')
             q_neighbors(todo, grid, r, c)
+
+    print(n_removed)
+        
+
+def part2_dumb(input):
+    """
+    Don't use todo set, just do full scans until no progress is made.
+    This is only 4x slower than using the todo set.
+    """
+    n_removed = 0
+    progress = True
+
+    # do full passes until no progress is made
+    while progress:
+        progress = False
+        for r in range(len(grid)):
+            for c in range(len(grid[0])):
+                if is_movable(grid, r, c):
+                    grid[r][c] = '.'
+                    n_removed += 1
+                    progress = True
 
     print(n_removed)
     
 
 
 if __name__ == '__main__':
-    # read input as a list of strings
-    # input = read_problem_input()
-
     # read input as a Grid object, where each 
     grid = grid_read(input_filename(), True)
 
-    # part1(grid)
+    part1(grid)
+    timer = time.perf_counter()
     part2(grid)
+    # part2_dumb(grid)
+    timer = time.perf_counter() - timer
+    # print(f'part2 timer: {timer:.6f}')
