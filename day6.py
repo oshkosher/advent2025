@@ -82,6 +82,30 @@ def parse_columns(xp_input, sign_row):
 def part2(input):
     """
     Transpose the table to make it easier to read the numbers.
+
+    Sample original:
+    123 328  51 64
+     45 64  387 23
+      6 98  215 314
+    *   +   *   +
+
+    Transposed:
+    1  *
+    24
+    356
+    
+    369+
+    248
+    8
+    
+     32*
+    581
+    175
+    
+    623+
+    431
+      4
+
     But strip off the signs and process those separately.
     """
     xp = [line.strip() for line in transpose(input[:-1], ' ')]
