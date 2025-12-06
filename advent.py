@@ -113,6 +113,152 @@ def read_problem_input(filename = None):
     return lines
 
 
+class Grid:
+    """
+    2-D grid stored as a list of lists.
+    Vertical coordinate commes first: grid[row][col]
+    """
+    def __init__(self, height, width, fill_value = '.'):
+        self.height = height
+        self.width = width
+        self.rows = [[fill_value for _ in range(width)] for _ in range(height)]
+
+    @staticmethod
+    def read(inf):
+        """
+        Reads a grid from a file.
+        Returns the grid.
+        inf can be a file object or a string filename.
+        """
+        filename = None
+        if isinstance(inf, str):
+            filename = inf
+            inf = open(filename)
+
+        grid = Grid(0, 0)
+        grid.width = None
+        
+        while True:
+            line = inf.readline().rstrip()
+            if line == '': break
+            
+            if grid.width == None:
+                grid.width = len(line)
+            else:
+                if len(line) != grid.width:
+                    raise Exception('Error reading grid. '
+                                    'Inconsistent row lengths')
+            grid.rows.append(list(line))
+
+        grid.height = len(grid.rows)
+            
+        if filename:
+            inf.close()
+
+    def __getitem__(self, i):
+        return self.rows[i]
+
+    def get(self, pos):
+        row, col = pos
+        return self.rows[row][col]
+
+    def set(self, pos, value):
+        row, col = pos
+        self.rows[row][col] = value
+
+    def row_to_string(self, r):
+        return ''.join([str(e) for e in self.rows[r]])
+
+    def print(self):
+        for r in range(self.height):
+            print(self.row_to_string(r))
+
+    def search(self, value):
+        """
+        Returns an iterable of (row,col) tuples for every cell
+        containing value.
+        """
+        for r in range(height):
+            row = self.rows[r]
+            for c in range(width):
+                if row[c] == value:
+                    yield r, c
+
+    def count(self, value):
+        """
+        Returns the number of cells containing the given value.
+        """
+        k = 0
+        for r in range(height):
+            row = self.rows[r]
+            for c in range(width):
+                if row[c] == value:
+                    k += 1
+        return k
+
+    def nb8(self, r, c):
+        """
+        Returns iterable of (r,c) coordinates of all neighbors which
+        are within bounds of the grid. This includes diagonals such
+        as (r-1, c+1).
+        """
+        
+        not_left = (c > 0)
+        not_right = (c+1 < self.width)
+
+        if r > 0:
+            if not_left: yield r-1, c-1
+            yield r-1, c
+            if not_right: yield r-1, c+1
+
+        if not_left: yield r, c-1
+        if not_right: yield r, c+1
+
+        if r+1 < self.height:
+            if not_left: yield r+1, c-1
+            yield r+1, c
+            if not_right: yield r+1, c+1
+
+
+    def nb8_count(self, r, c, value = '#'):
+        """
+        Returns the number of neighbors (including diagonals) with the
+        given value.
+        """
+        k = 0
+        for ri, ci in self.nb8(r, c):
+            if self.rows[ri][ci] == value:
+                k += 1
+        return k
+
+
+class SparseGridRow:
+    def __init__(self, sparse_grid, r):
+        self.sparse_grid = sparse_grid
+        self.r = r
+
+    def __getitem__(self, c):
+        return self.sparse_grid.get((self.r,c))
+
+    def __setitem__(self, c, value):
+        self.sparse_grid.set((self.r,c), value)
+        
+
+class SparseGrid:
+    def __init__(self):
+        self.row_min = self.row_max = self.col_min = self.col_max = None
+        self.data = {}
+
+    def set(self, pos, value):
+        self.data[pos] = value
+
+    def get(self, pos, default='.'):
+        return self.data.get(pos, default)
+
+    def __getitem__(self, r):
+        return SparseGridRow(self, r)
+
+
 def grid_read(inf, split_rows_into_lists = False):
     """
     Read a 2-d grid.
@@ -450,17 +596,45 @@ def is_ordered(lst):
     return True
 
 
-def column(grid, c):
+def column(grid, c, is_str):
     col = [row[c] for row in grid]
-    if isinstance(grid[0], str):
+    if is_str:
+        return ''.join(col)
+    else:
+        return col
+    
+
+def in_range_or_fill(lst, i, fill):
+    if i < len(lst):
+        return lst[i]
+    else:
+        return fill
+
+
+def column_uneven(grid, c, is_str, fill):
+    col = [in_range_or_fill(row, c, fill) for row in grid]
+    if is_str:
         return ''.join(col)
     else:
         return col
 
 
-def transpose(grid):
-    width = len(grid[0])
-    return [column(grid, c) for c in range(width)]
+def transpose(rows, fill = None, is_fixed_width = False):
+    """
+    Returns a transposition of rows.
+    If the caller knows that every row in rows has the same length,
+    they can set is_fixed_width to True, and some checks will be skipped.
+
+    If rows[0] is a string, results will be strings.
+    """
+    is_str = type(rows[0]) == str
+    
+    if is_fixed_width:
+        width = len(rows[0])
+        return [column(rows, c, is_str) for c in range(width)]
+    else:
+        width = max([len(line) for line in rows])
+        return [column_uneven(rows, c, is_str, fill) for c in range(width)]
 
 
 def sliding_window(sequence, window_size = 2):
