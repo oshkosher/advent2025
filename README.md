@@ -10,3 +10,4 @@ To get input files (my code assumes their filenames will be in the form day\<n\>
 - [day 3](day3.py) : Subset of digits maximizing value
 - [day 4](day4.py) : Repeated grid neighbor counting
 - [day 5](day5.py) : Integer ranges
+- [day 6](day6.py) : Processing rows and columns of digits
