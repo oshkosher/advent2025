@@ -11,3 +11,4 @@ To get input files (my code assumes their filenames will be in the form day\<n\>
 - [day 4](day4.py) : Repeated grid neighbor counting
 - [day 5](day5.py) : Integer ranges
 - [day 6](day6.py) : Processing rows and columns of digits
+- [day 7](day7.py) : Splitting and rejoining flows
