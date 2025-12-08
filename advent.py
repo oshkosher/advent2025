@@ -57,6 +57,7 @@ md5(s) - returns lowercase base-16 MD5 hash of ASCII string s
 import re, sys, collections, time, math, hashlib
 from fractions import Fraction
 from primes import prime_list
+from typing import Optional
 import eheap
 # import draw_grid
 
@@ -178,9 +179,9 @@ class Grid:
         Returns an iterable of (row,col) tuples for every cell
         containing value.
         """
-        for r in range(height):
+        for r in range(self.height):
             row = self.rows[r]
-            for c in range(width):
+            for c in range(self.width):
                 if row[c] == value:
                     yield r, c
 
@@ -189,9 +190,9 @@ class Grid:
         Returns the number of cells containing the given value.
         """
         k = 0
-        for r in range(height):
+        for r in range(self.height):
             row = self.rows[r]
-            for c in range(width):
+            for c in range(self.width):
                 if row[c] == value:
                     k += 1
         return k
@@ -341,11 +342,11 @@ def grid_add_border(grid, border_width=1, fill='.'):
     Add a border of (border_width) rows and columns around a grid. A new grid is returned.
     """
     is_string = isinstance(grid[0], str)
-    padded = create_grid(len(grid) + border_width*2,
+    padded = grid_create(len(grid) + border_width*2,
                         len(grid[0]) + border_width*2,
                         not is_string,
                         fill)
-    paste_grid(padded, border_width, border_width, grid)
+    grid_paste(padded, border_width, border_width, grid)
     return padded
 
 
@@ -496,21 +497,22 @@ def sparse_to_grid(sparse_grid, empty='.', split_rows_into_lists=False):
     def makeRow(r):
         row = [sparse_grid.get((r,c), empty)
                for c in range(min_col, min_col+width)]
-        if not split_rows_into_lists:
-            row = ''.join(row)
-        return row
+        if split_rows_into_lists:
+            return row
+        else:
+            return ''.join(row)
 
     return [makeRow(r) for r in range(min_row, min_row + height)]
 
         
 def test_sparse_read():
     input = ['.#.', '.x.', 'S..']
-    s = sparse_read(input)
+    s = grid_read_sparse(input)
     print(repr(s))
 
     print(repr(sparse_size(s)))
 
-    print_grid(sparse_to_grid(s, '-', False))
+    grid_print(sparse_to_grid(s, '-', False))
     
     # input = open('2023/day21.small')
     # sparse_read(input)
@@ -563,10 +565,10 @@ def turn_angle(p, d):
 
 
 def testPasteGrid():
-    src = create_grid(3, 5, True, 'o')
-    dest = create_grid(10, 10, False, '.')
-    paste_grid(dest, 1, 2, src)
-    print_grid(dest)
+    src = grid_create(3, 5, True, 'o')
+    dest = grid_create(10, 10, False, '.')
+    grid_paste(dest, 1, 2, src)
+    grid_print(dest)
 
   
 def list2str(lst):
@@ -764,10 +766,10 @@ def sum_factors(x):
     return sumOfPrimeFactorList(prime_factorization(x))
 
 
-sum_factors_cache = {}
+sum_factors_cache: dict[int, int] = {}
 
 
-def sumFactors2(n):
+def sum_factors2(n):
     # print(f'sumFactors({n}) = {sumFactors(n)} or ')
 
     if n in sum_factors_cache:
@@ -785,8 +787,8 @@ def sumFactors2(n):
         elif k == 0:
             return n
         else:
-            return sumFactors2(k)
-            # return sumFactors(k)
+            return sum_factors2(k)
+            # return sum_factors(k)
 
     s = 0
     i = 1
@@ -811,36 +813,36 @@ def sumFactors2(n):
 
         # print(f' sf({n}) = {s}')
 
-    if s != sumFactors(n):
-        print(f'Error, sumFactors2({n}) is {sumFactors(n)}, but got {s}')
+    if s != sum_factors(n):
+        print(f'Error, sum_factors2({n}) is {sum_factors(n)}, but got {s}')
         sys.exit(1)
     sum_factors_cache[n] = s
     return s
 
 
-def testSumFactors(n):
+def test_sum_factors(n):
     for i in range(2, n):
         # prime_factors = prime_factorization(i)
         # sum_factor_list = sumOfPrimeFactorList(prime_factors)
-        sum_factor_list = sumOfFactorsUsingPrimeFactorization(i)
-        sum_factors = sumOfFactors(i)
-        assert sum_factor_list == sum_factors, \
-            f'i={i}: {sum_factor_list} != {sum_factors}'
+        sf1 = sum_factors(i)
+        sf2 = sum_factors2(i)
+        assert sf1 == sf2, \
+            f'i={i}: {sf1} != {sf2}'
     print('ok')
 
 
-def testSumFactors2():
+def test_sum_factors2():
     end = 10000
 
     timer = time.perf_counter()
-    s0 = sum([sumFactors(k) for k in range(1, end)])
+    s0 = sum([sum_factors(k) for k in range(1, end)])
     timer = time.perf_counter() - timer
-    print(f'sumFactors {timer*1000:.3f} ms')
+    print(f'sum_factors {timer*1000:.3f} ms')
 
     timer = time.perf_counter()
-    s1 = sum([sumFactors2(k) for k in range(1, end)])
+    s1 = sum([sum_factors2(k) for k in range(1, end)])
     timer = time.perf_counter() - timer
-    print(f'sumFactors2 {timer*1000:.3f} ms')
+    print(f'sum_factors2 {timer*1000:.3f} ms')
 
     print(s0, s1)
     
@@ -908,7 +910,7 @@ def count_set_bits_slow(x):
     return count
 
 
-count_set_bits_byte_table = None
+count_set_bits_byte_table: Optional[list[int]] = None
 
 def count_set_bits(x):
     global count_set_bits_byte_table
@@ -1099,5 +1101,5 @@ if __name__ == '__main__':
     # print(repr(freq('google')))
     # print(repr(freq(['cow', 'dog', 'cat', 'horse', 'dog', 'horse', 'dog', 'dog'])))
     # testClump()
-    testSumFactors2()
+    test_sum_factors2()
     pass

@@ -174,7 +174,7 @@ def test_heap():
   for x in input:
     h.add(x)
     if not h.is_valid():
-      print(f'Heap failed after adding {h.size()} entries, last one={x}')
+      print(f'Heap failed after adding {len(h)} entries, last one={x}')
       return False
 
   for i in range(len(input)):
