@@ -518,6 +518,13 @@ def test_sparse_read():
     # sparse_read(input)
 
 
+def mult(iterable):
+    p = 1
+    for x in iterable:
+        p *= x
+    return p
+
+
 def movep(pos, d, count=1):
     """
     pos is a list [row, col] which is modified in-place
