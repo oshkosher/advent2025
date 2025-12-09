@@ -2,3 +2,4 @@ __pycache__
 *~
 *.in
 test_*.py
+*.png

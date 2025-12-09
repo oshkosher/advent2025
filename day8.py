@@ -172,12 +172,12 @@ if __name__ == '__main__':
     timer = time.perf_counter_ns()
     dist_q = create_pair_distance_queue(boxes)
     timer = time.perf_counter_ns() - timer
-    # print(f'dist_q {timer/1e6:.0f} ms')
+    # print(f'dist_q {timer/1e6:.2f} ms')
     
     t0 = time.perf_counter_ns()
     part1(boxes, dist_q)
     t1 = time.perf_counter_ns()
     part2(boxes, dist_q)
     t2 = time.perf_counter_ns()
-    # print(f'part1 {(t1-t0)/1_000_000:.0f} millis')
-    # print(f'part2 {(t2-t1)/1_000_000:.0f} millis')
+    # print(f'part1 {(t1-t0)/1e6:.2f} millis')
+    # print(f'part2 {(t2-t1)/1e6:.2f} millis')

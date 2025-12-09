@@ -8,7 +8,7 @@ Ed Karrels, ed.karrels@gmail.com, December 2025
 input_filename() - figure out name of input file based on sys.argv[1]
 read_problem_input(filename=None) - read input into list of strings, no newlines
 read_grid(inf, lists=False) - read list of strings or lists
-create_grid(rows, cols, lists, fill='.') - create empty grid
+grid_create(rows, cols, lists, fill='.') - create empty grid
 grid_get(grid, (row,col)) - use tuple to read grid cell
 paste_grid(dest_grid, dest_row, dest_col, src_grid)
   copy one grid onto another

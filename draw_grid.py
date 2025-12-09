@@ -3,7 +3,7 @@
 import sys
 # install this as pillow: "python -m pip install Pillow"
 from PIL import Image, ImageDraw
-from advent import read_grid
+from advent import grid_read
 
 
 defaut_cell_color_map = {
