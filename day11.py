@@ -32,52 +32,10 @@ class Node:
         # to this node from some starting point
         self.n_paths = 0
 
-    @staticmethod
-    def create_from_input_line(line):
-        node = Node(line[:3])
-        node.outs = line[5:].split()
-        return node
-
     def __repr__(self):
         outs = ' '.join([o.name for o in self.outs])
         ins = ' '.join([o.name for o in self.ins])
         return f'Node({self.name} outs=({outs}) ins=({ins}))'
-
-    # without these, it just use the pointer to the object, which should
-    # be fine
-    
-    def __hash__(self):
-        return hash(self.name)
-
-    def __eq__(self, other):
-        return self.name == other.name
-
-    def has_all_n_paths(self):
-        """
-        Returns True if all the input nodes for this node have n_paths set.
-        Without their n_paths set I can't compute my n_paths value.
-        """
-        for incoming in self.ins:
-            if incoming.n_paths == None:
-                return False
-        return True
-
-    def set_n_paths(self):
-        """
-        Sets my n_paths to be the sum of all my incoming nodes' n_paths.
-        Return True if successful, False if any of them are net set.
-        """
-        if self.n_paths != None:
-            return self.n_paths
-        
-        n_paths = 0
-        for incoming in self.ins:
-            if incoming.n_paths == None:
-                return False
-            n_paths += incoming.n_paths
-        self.n_paths = n_paths
-        
-        return True
 
 
 def parse_input(input):
@@ -135,65 +93,6 @@ def count_routes_dfs(node, dest, path_count = [0]):
 
 def part1(node_map):
     print(count_routes_dfs(node_map['you'], node_map['out']))
-
-
-REPORT_FREQ = 10000000
-next_report = REPORT_FREQ
-
-l1_choke = set(['xed', 'kxy', 'nju'])
-l2_choke = set(['yhv', 'oyz', 'qlj', 'uyb'])
-l3_choke = set(['mfc', 'bjj', 'cin', 'xyw'])
-l4_choke = set(['bid', 'jcy', 'cub', 'ooa'])
-l5_choke = set(['you', 'tgk', 'cjp', 'ykg'])
-
-
-def find_choke_points(src, dest, node_map):
-    """
-    Assuming there is a small set of nodes every path from src to dest
-    pass through, 
-    """
-    pass
-
-
-def part2_dft_too_slow(node, path_count, visited, depth=0):
-    global next_report, REPORT_FREQ
-    if node.name == 'out':
-        # print('at out')
-        if 'dac' in visited and 'fft' in visited:
-            path_count[0] += 1
-            if path_count[0] == next_report:
-                print(f'{path_count[0]} paths found...')
-                sys.stdout.flush()
-                next_report += REPORT_FREQ
-        return
-
-    # prefix = ' ' * depth
-    # print(f'{prefix}{node.name}')
-    
-    if node.name in visited:
-        print(f'Cycle to {node}')
-        return
-
-    if node.name in l2_choke and 'fft' not in visited:
-        return
-
-    if node.name in l5_choke and 'dac' not in visited:
-        return
-        
-    
-    visited.add(node.name)
-
-    for child in node.outs:
-        # prefix = ' ' * depth
-        # print(f'{prefix}{node.name} -> {child.name}')
-        part2_dft_too_slow(child, path_count, visited, depth+1)
-
-    visited.remove(node.name)
-
-
-def reset_path_counts(node_map):
-    for node in node_map.values():
-        node.n_paths = 0
 
 
 def find_descendent_subset(src):
@@ -260,39 +159,6 @@ def create_subgraph(node_map, selected_set):
     return sub_node_map
 
 
-def create_reachable_subgraph(src, dest):
-    """
-    returns a node_map consisting of just the nodes reachable from src
-    new nodes are created, with 'ins' and 'outs' reflecting this subgraph.
-    """
-
-    print(f'creating reachable subgraph from {src.name}')
-    
-    # nodes visited
-    visited = {}
-
-    visit_q = collections.deque()
-    visit_q.append(src)
-
-    while len(visit_q):
-        node = visit_q.popleft()
-        if node.name not in visited:
-            visited[node.name] = node
-        for child in node.outs:
-            visit_q.append(child)
-
-    print(f'{len(visited)} nodes in subgraph')
-    for node in visited.values():
-        print(node)
-            
-    node_map = {}
-    for name in visited:
-        pass
-
-    return visited
-    
-
-
 def count_paths_dp(src, dest):
     path_map = {}
     # path_map = {src: 1}
@@ -321,45 +187,6 @@ def count_paths_dp(src, dest):
                 q.append(out)
                     
     return path_map[dest]
-
-
-def test_depths(node_map):
-    """
-    Check if every route from the root to a node is the same length.
-    Answer: yes, many are reachable via paths of different lengths.
-    """
-    if len(node_map) < 100:
-        root = node_map['you']
-    else:
-        root = node_map['svr']
-        
-    node_depths = {root: 0}
-    visited = set()
-    
-    q = collections.deque()
-    q.append(root)
-    n_checked = 0
-
-    while len(q):
-        node = q.popleft()
-        if node in visited:
-            continue
-        visited.add(node)
-        n_checked += 1
-        
-        depth = node_depths[node]
-
-        for child in node.outs:
-            if child in node_depths:
-                if node_depths[child] != depth + 1:
-                    print(f'Inconsistency: {child} is at depths '
-                          f'{node_depths[child]} and {depth+1}')
-            else:
-                node_depths[child] = depth + 1
-            q.append(child)
-
-    print(f'{n_checked} checked.')
-    
     
 
 def part2(node_map):
@@ -368,18 +195,22 @@ def part2(node_map):
     dac_in_set = find_ancestor_subset(node_map['dac'])
     dac_out_set = find_descendent_subset(node_map['dac'])
 
+    # count all the paths from svr to fft
     subgraph_fft_in = create_subgraph(node_map, fft_in_set)
     paths_to_fft = count_paths_dp(subgraph_fft_in['svr'],
                                   subgraph_fft_in['fft'])
 
+    # count all the paths from fft to dac
     subgraph_fft_to_dac = create_subgraph(node_map, fft_out_set & dac_in_set)
     paths_fft_to_dac = count_paths_dp(subgraph_fft_to_dac['fft'],
                                       subgraph_fft_to_dac['dac'])
-    
+
+    # count all the paths from dac to out
     subgraph_dac_out = create_subgraph(node_map, dac_out_set)
     paths_dac_out = count_paths_dp(subgraph_dac_out['dac'],
                                    subgraph_dac_out['out'])
-    
+
+    # total possible = product of all three
     print(paths_to_fft * paths_fft_to_dac * paths_dac_out)
 
 
