@@ -3,7 +3,7 @@
 """
 Advent of Code 2025, Day 10: Factory
 
-
+Integer programming with boolean matrices
 
 Ed Karrels, ed.karrels@gmail.com, December 2025
 """
@@ -215,5 +215,5 @@ if __name__ == '__main__':
     t1 = time.perf_counter_ns()
     part2(machines)
     t2 = time.perf_counter_ns()
-    print(f'part1 {(t1-t0)/1e6:.2f} millis')
-    print(f'part2 {(t2-t1)/1e6:.2f} millis')
+    # print(f'part1 {(t1-t0)/1e6:.2f} millis')
+    # print(f'part2 {(t2-t1)/1e6:.2f} millis')

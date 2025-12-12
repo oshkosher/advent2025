@@ -362,49 +362,7 @@ def test_depths(node_map):
     
     
 
-def part2(input):
-    """
-    passes through dac and fft
-    dac: sxv emj
-    fft: yzt blx jpn xrt ysw
-    paths from svr to out including dac and fft
-
-    more than 5,560,000,000 paths
-    """
-    root = node_map['svr']
-    fft = node_map['fft']
-    dac = node_map['dac']
-    out = node_map['out']
-    # find_part2(node, path_count, visited)
-
-    # routes_root_to_fft = count_paths_bfs(root, fft, node_map)
-    # print(f'{routes_root_to_fft} routes from root to fft')
-
-    # routes_dac_to_count = count_paths_bfs(dac, out, node_map)
-    # print(f'{routes_dac_to_count} routes from dac to out')
-
-    # n = count_paths_bfs(node_map['you'], node_map['out'], node_map)
-
-    m = create_reachable_subgraph(node_map['you'])
-
-
-
-if __name__ == '__main__':
-    # read input as a list of strings
-    input = read_problem_input()
-    node_map = parse_input(input)
-
-    # print(node_map['you'])
-
-    # output_graphviz(node_map)
-
-    # print(node_map['you'])
-    # print(node_map['svr'])
-    
-    # part1(node_map)
-
-    # test_depths(node_map)
-
+def part2(node_map):
     fft_in_set = find_ancestor_subset(node_map['fft'])
     fft_out_set = find_descendent_subset(node_map['fft'])
     dac_in_set = find_ancestor_subset(node_map['dac'])
@@ -413,18 +371,24 @@ if __name__ == '__main__':
     subgraph_fft_in = create_subgraph(node_map, fft_in_set)
     paths_to_fft = count_paths_dp(subgraph_fft_in['svr'],
                                   subgraph_fft_in['fft'])
-    print(paths_to_fft)
-    print()
 
     subgraph_fft_to_dac = create_subgraph(node_map, fft_out_set & dac_in_set)
     paths_fft_to_dac = count_paths_dp(subgraph_fft_to_dac['fft'],
                                       subgraph_fft_to_dac['dac'])
-    print(paths_fft_to_dac)
-    print()
     
     subgraph_dac_out = create_subgraph(node_map, dac_out_set)
     paths_dac_out = count_paths_dp(subgraph_dac_out['dac'],
                                    subgraph_dac_out['out'])
-    print(paths_dac_out)
-    print()
+    
     print(paths_to_fft * paths_fft_to_dac * paths_dac_out)
+
+
+if __name__ == '__main__':
+    # read input as a list of strings
+    input = read_problem_input()
+    node_map = parse_input(input)
+
+    # output_graphviz(node_map)
+    
+    part1(node_map)
+    part2(node_map)

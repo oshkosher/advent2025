@@ -14,3 +14,5 @@ To get input files (my code assumes their filenames will be in the form day\<n\>
 - [day 7](day7.py) : Splitting and rejoining flows
 - [day 8](day8.py) : Merging connected subgraphs
 - [day 9](day9.py) : Rectangular regions inside an irregular region
+- [day 10](day10.py) : Integer programming with boolean matrices
+- [day 11](day11.py) : Counting paths through a graph
