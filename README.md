@@ -16,3 +16,4 @@ To get input files (my code assumes their filenames will be in the form day\<n\>
 - [day 9](day9.py) : Rectangular regions inside an irregular region
 - [day 10](day10.py) : Integer programming with boolean matrices
 - [day 11](day11.py) : Counting paths through a graph
+- [day 12](day12.py) : Fitting puzzle pieces into minimal region

@@ -3,11 +3,7 @@
 """
 Advent of Code 2025, Day 12: Christmas Tree Farm
 
-12x5: 1 0 1 0 2 2
-width x length: quanitity of each shape
-rotate and flip
-
-all presents are 3x3 grids
+Fitting puzzle pieces into minimal region
 
 Ed Karrels, ed.karrels@gmail.com, December 2025
 """
@@ -29,7 +25,8 @@ class Region:
         self.counts = tuple(counts)
 
     def __repr__(self):
-        return f'Region({self.width}x{self.height}, {" ".join([str(c) for c in self.counts])})'
+        return (f'Region({self.width}x{self.height}, '
+                f'{" ".join([str(c) for c in self.counts])})')
 
 
 class Present:
@@ -38,6 +35,7 @@ class Present:
         lines: 3 lines of 3 chars, '#' or '.'
         """
         self.original = lines[:]
+        assert len(lines)==3 and len(lines[0]) == 3
 
         # all rotations and flips
         self.rots = []
@@ -111,9 +109,6 @@ def parse_input(input):
         end_line = line_no
 
         present = Present(input[start_line:end_line])
-        present.print()
-        print(len(present))
-        print()
         presents.append(present)
 
         line_no += 1
@@ -124,36 +119,59 @@ def parse_input(input):
         width, height, *counts = ints(input[line_no])
         regions.append(Region(width, height, counts))
         line_no += 1
-        print(regions[-1])
+        # print(regions[-1])
 
-    return present, regions
-
-
-def part1(input):
-    pass
+    return presents, regions
 
 
-def part2(input):
-    pass
+def easy_no(region, presents):
+    """
+    If the number of cells covered by the requested presents is less
+    than the area of the region, then there is no solution.
+    """
+    cells_available = region.width * region.height
+    cells_needed = sum([c * len(presents[j])
+                        for j, c in enumerate(region.counts)])
+    return cells_available < cells_needed
+
+
+def easy_yes(region, presents):
+    """
+    Every present fits in a 3x3 square. If the right number of 3x3
+    squares fit in the region, then there is an easy solution.
+    """
+    n_presents = sum(region.counts)
+    n_squares = (region.width//3) * (region.height//3)
+    return n_squares >= n_presents
+
+
+def part1(presents, regions):
+    n_difficult = 0
+    n_easy_fits = 0
+    for i, region in enumerate(regions):
+        if easy_no(region, presents):
+            fits = 'no'
+        elif easy_yes(region, presents):
+            fits = 'yes'
+            n_easy_fits += 1
+        else:
+            fits = 'difficult to tell'
+            n_difficult += 1
+            
+        # print(f'region {i} {region.width}x{region.height}: {fits}')
+
+    if n_difficult:
+        print('Oops, this puzzle is too hard for me')
+    else:
+        # OK, I was intimidated for no reason.
+        print(n_easy_fits)
 
 
 if __name__ == '__main__':
     # read input as a list of strings
     input = read_problem_input()
 
-    # read input as a Grid object, where each 
-    # grid = grid_read(input_filename(), True)
-
-    # p = Present(['.##', '###', '#.#'])
-    # p.print()
-    # print()
-    
-    # for variant in p.rots:
-    #     p.print(variant)
-    #     print()
-
     presents, regions = parse_input(input)
-
   
-    # part1(input)
-    # part2(input)
+    part1(presents, regions)
+
