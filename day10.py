@@ -13,7 +13,7 @@ import sys, os, re, itertools, math, collections, itertools
 import numpy as np
 
 # linear programming library
-import pulp
+# import pulp
 
 # change to the directory of the script so relative references work
 from pathlib import Path
@@ -196,6 +196,233 @@ def joltage_presses(machine):
     # print(repr(check))
 
     return sum(soln)
+
+
+def joltage_output_math(machine):
+    """
+    Just output the math problems so I can use them as direct sample input
+    while working on my own solver.
+
+    Output the boolean matrix A and goal vector b, and whether
+    the problem is overconstrained, underconstrained, or conventionally
+    solvable.
+    
+    [0 0 0 0 1 1  * [1 = [3
+     0 1 0 0 0 1     3    5
+     0 0 1 1 1 0     0    4
+     1 1 0 1 0 0]    3    7]
+                     1    
+                     2]
+
+    augmented matrix:
+      0 0 0 0 1 1 3
+      0 1 0 0 0 1 5
+      0 0 1 1 1 0 4
+      1 1 0 1 0 0 7
+
+    row-reduced:
+    1 0 0 1 0 -1 2
+    0 1 0 0 0  1 5
+    0 0 1 1 0 -1 1
+    0 0 0 0 1  1 3
+
+    meaning:
+      x0 + x3 - x5 = 2
+      x1 + x5 = 5
+      x2 + x3 - x5 = 1
+      x4 + x5 = 3
+
+    solved for each variable independently:
+      x0 = 2 - x3 + x5
+      x1 = 5 - x5
+      x2 = 1 - x3 + x5
+      x3 = 1 - x2 + x5
+      x4 = 3 - x5
+      x5 = 5 - x1
+
+      Starting from x1, its possible values are 0..5
+        scanning value: x1
+      Then x5 = 5 - x1
+        compuated value: x1
+      And x4 = 3 - x5 = 3 - (5 - x1) = x1 - 2
+        computed value: x4
+      x0 + x3 = x5 + 2
+        possible values x0 = 0 .. x5+2
+        scanning value: x0
+        x3 = 0 .. x5 + 2 - x0
+        computed value: x3
+      x2 = 1 - x3 + x5
+        computed value: x2
+
+    Or based on the original matrix:
+
+    [0 0 0 0 1 1   = [3
+     0 1 0 0 0 1      5
+     0 0 1 1 1 0      4
+     1 1 0 1 0 0]     7]
+
+     x4 + x5 = 3
+     x1 + x5 = 5
+     x2 + x3 + x4 = 4
+     x0 + x1 + x3 = 7
+    
+    Let x1 = 3. That simplified two formulas:
+
+    Apply this to augmented matrix by adding a row:
+    
+     0 0 0 0 1 1 3
+     0 1 0 0 0 1 5
+     0 0 1 1 1 0 4
+     1 1 0 1 0 0 7
+     0 1 0 0 0 0 3
+
+    Simplify the matrix by subtracting that row from everyone with an x1:
+
+     0 0 0 0 1 1 3
+     0 0 0 0 0 1 2
+     0 0 1 1 1 0 4
+     1 0 0 1 0 0 4
+     0 1 0 0 0 0 3
+
+     x4 + x5 = 3
+     x5 = 2
+     x2 + x3 + x4 = 4
+     x0 + x3 = 4
+    
+    x5 is now solved, subtract that from other rows:
+    
+     0 0 0 0 1 0 1
+     0 0 0 0 0 1 2
+     0 0 1 1 1 0 4
+     1 0 0 1 0 0 4
+     0 1 0 0 0 0 3
+
+     x4 = 1
+     x2 + x3 + x4 = 4
+     x0 + x3 = 4
+
+    x4 solved, use it:
+    
+     0 0 0 0 1 0 1
+     0 0 0 0 0 1 2
+     0 0 1 1 0 0 3
+     1 0 0 1 0 0 4
+     0 1 0 0 0 0 3
+
+    When guessing a value, choose a value in a formula with a minimum RHS.
+     x2 + x3 = 3
+     x0 + x3 = 4
+
+    Sample problem 2
+
+      1 0 1 1 0  7
+      0 0 0 1 1  5
+      1 1 0 1 1 12
+      1 1 0 0 1  7
+      1 0 1 0 1  2
+
+    row-reduced
+
+      1  0  1  0  0  2
+      0  1 -1  0  0  5
+      0  0  0  1  0  5
+      0  0  0  0  1  0
+      0  0  0  0  0  0
+
+      x0 + x2 = 2
+      x1 - x2 = 5  or x1 = 5 + x2
+      x3 = 5
+      x4 = 0
+
+      try x0 = 0 (remove zero rows, add a row for new value)
+
+      1  0  1  0  0  2
+      0  1 -1  0  0  5
+      0  0  0  1  0  5
+      0  0  0  0  1  0
+      1  0  0  0  0  0
+        reduce
+      1  0  0  0  0  0
+      0  1  0  0  0  7
+      0  0  1  0  0  2
+      0  0  0  1  0  5
+      0  0  0  0  1  0
+    
+
+      try x0 = 1
+        x2 = 1
+        x1 = 6
+      try x0 = 2
+
+      1  0  1  0  0  2
+      0  1 -1  0  0  5
+      0  0  0  1  0  5
+      0  0  0  0  1  0
+      1  0  0  0  0  2
+        reduce
+      1  0  0  0  0  2
+      0  1  0  0  0  5
+      0  0  1  0  0  0
+      0  0  0  1  0  5
+      0  0  0  0  1  0
+
+        preferred, for minimum total
+
+      soln = [2, 5, 0, 5, 0]
+
+
+    Sample problem 3
+      1 1 1 0 10
+      1 0 1 1 11
+      1 0 1 1 11
+      1 1 0 0  5
+      1 1 1 0 10
+      0 0 1 0  5
+
+    row-reduced
+      1  0  0  1  6
+      0  1  0 -1 -1
+      0  0  1  0  5
+      0  0  0  0  0
+      0  0  0  0  0
+      0  0  0  0  0
+
+      x0 + x3 = 6
+      x1 - x3 = -1
+      x2 = 5
+
+    After row-reduction, the leading entry in every nonempty row will be 1.
+    Since this started with a boolean/binary matrix, will all the remaining
+    entries (except the last column) be 1, 0, or -1?
+
+
+    
+
+    """
+
+    height = len(machine.jolts)
+    width = len(machine.buttons)
+
+    A = [[0] * width for _ in range(height)]
+
+    for c in range(width):
+        button = machine.buttons[c]
+        for r in button:
+            A[r][c] = 1
+
+    goal = np.array(machine.jolts)
+
+    print('A = {')
+    for row in A:
+        print('  {' + ', '.join([str(x) for x in row]) + '},')
+    print('}')
+    print('b = ' + repr(machine.jolts))
+    if width > height:
+        print('# solution: underconstrained')
+    elif width < height:
+        print('# solution: overconstrained')
+    else:
+        print('# solution: easy')
     
         
 def part2(machines):
@@ -204,6 +431,14 @@ def part2(machines):
         # print(f'machine {i}')
         total_presses += joltage_presses(machine)
     print(total_presses)
+    
+        
+def part2_list_problems(machines):
+    for i, machine in enumerate(machines):
+        print(f'# machine {i}')
+        joltage_output_math(machine)
+        print()
+
 
 if __name__ == '__main__':
     # read input as a list of strings
@@ -213,7 +448,8 @@ if __name__ == '__main__':
     t0 = time.perf_counter_ns()
     part1(machines)
     t1 = time.perf_counter_ns()
-    part2(machines)
+    # part2(machines)
+    part2_list_problems(machines)
     t2 = time.perf_counter_ns()
     # print(f'part1 {(t1-t0)/1e6:.2f} millis')
     # print(f'part2 {(t2-t1)/1e6:.2f} millis')
