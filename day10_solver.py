@@ -201,7 +201,7 @@ def solve_recurse(d, A, depth = ''):
 
     # for value in range(0, d.soln_max_values[guess_c]+1):
     
-    for value in range(13, d.soln_max_values[guess_c]+1):
+    for value in range(0, d.soln_max_values[guess_c]+1):
         # make a copy of A to mess with
         A_copy = A.copy()
         A_copy[-1][-1] = value
@@ -232,14 +232,14 @@ def solve(original_matrix, b):
 
     solve_recurse(recurse_data, augmented)
     
-    print(f'best found:    {recurse_data.best_soln!r}')
+    print(f'best found:    {recurse_data.best_soln!r} (size={sum(recurse_data.best_soln)})')
 
 
 def find_solutions(problem_list):
     for i, (A, b, x) in enumerate(problem_list):
         matrix = Matrix(A)
         print(f'problem {i}')
-        print(f'known solution {x!r}')
+        print(f'known solution {x!r} (size={sum(x)})')
         solve(matrix, b)
         print()
 

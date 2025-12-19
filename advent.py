@@ -1088,7 +1088,9 @@ class Matrix:
             x = row[i] * factor
             
             # normalize to integer
-            if isinstance(x, Fraction) and x.is_integer():
+            # Fraction.is_integer added in version 3.12
+            # if isinstance(x, Fraction) and x.is_integer():
+            if isinstance(x, Fraction) and x.denominator == 1:
                 x = x.numerator
                 
             row[i] = x
@@ -1100,7 +1102,7 @@ class Matrix:
             x = dest_row[i] + factor * src_row[i]
 
             # normalize to integer
-            if isinstance(x, Fraction) and x.is_integer():
+            if isinstance(x, Fraction) and x.denominator == 1:
                 x = x.numerator
 
             dest_row[i] = x
