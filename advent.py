@@ -48,7 +48,7 @@ freq(sequence) - returns ordered frequency list: [('e', 37), ..., ('q', 1)]
 ints(string) - return a list of integers in the string
 int_len(n) - returns len(str(n))
 count_set_bits(integer) - returns the number of '1' bits in an integer
-matrix_solve(matrix) - Gram-Schmidt matrix reduction
+matrix_row_reduce(matrix) - apply Gaussian elimination to row-reduce a matrix
 matrix_print(matrix)
 dijkstra(container, origin_node) - applies Dijkstra's algorithm
 md5(s) - returns lowercase base-16 MD5 hash of ASCII string s
@@ -936,6 +936,361 @@ def count_set_bits(x):
 
     return count
 
+
+class Matrix:
+    """
+    Simple matrix library, designed for use with integers and
+    fractions.Fraction objects.
+    """
+    
+    def __init__(self, input_matrix = None, height = 1, width = 1):
+        """
+        Call this with a height and width to create a matrix of zeros.
+        Call this with a list of rows to make a new matrix containing
+        a copy that data.
+        """
+
+        if input_matrix is None:
+            assert (isinstance(height, int) and isinstance(width, int)
+                    and height > 0 and width > 0)
+            self.height = height
+            self.width = width
+            self.rows = [[0] *  width for _ in range(height)]
+
+        else:
+            if not (isinstance(input_matrix, list) and
+                    isinstance(input_matrix[0], list)):
+                raise Exception('input_matrix not a list of lists')
+
+            self.height = len(input_matrix)
+            self.width = len(input_matrix[0])
+            self.rows = [None] * self.height
+            # print(repr(self.rows))
+            for r in range(self.height):
+                if len(input_matrix[r]) != self.width:
+                    raise Exception('Inconsistent row lengths')
+                self.rows[r] = input_matrix[r][:]
+
+    def __getitem__(self, i):
+        return self.rows[i]
+
+    def __len__(self):
+        return self.height
+
+    def copy(self):
+        """
+        Returns a deep copy of the matrix
+        """
+        return Matrix(self.rows)
+    
+    def column(self, c):
+        if c < 0:
+            c += self.width
+        return [row[c] for row in self.rows]
+
+    def row_reduce(self):
+        VERBOSE = False
+
+        r = c = 0
+
+        while c < self.width and r < self.height:
+            pivot_r = self.pivot_row(c, r)
+            if self.rows[pivot_r][c] == 0:
+                c += 1
+                continue
+
+            self.swap_rows(r, pivot_r)
+            if VERBOSE:
+                print(f'swap rows {r} and {pivot_r}')
+                self.print()
+                print()
+
+            assert self.has_leading_zeros(r, c)
+
+            if self.rows[r][c] != 1:
+                factor = Fraction(1, self.rows[r][c])
+                self.mult_row(r, factor)
+                if VERBOSE:
+                    print(f'Normalize leading entry row {r}')
+                    self.print()
+                    print()
+
+            assert self.rows[r][c] == 1
+
+            for cancel_r in range(self.height):
+                if cancel_r == r: continue
+                if self.rows[cancel_r][c] != 0:
+                    factor = -self.rows[cancel_r][c]
+                    self.add_row_multiple(cancel_r, r, factor)
+                    if VERBOSE:
+                        print(f'cancel row {cancel_r}, {factor=}')
+                        self.print()
+                        print()
+
+            c += 1
+            r += 1
+
+
+    def append_col(self, col):
+        """
+        Add a column to the end
+        """
+        assert len(col) == self.height
+        for r in range(self.height):
+            self.rows[r].append(col[r])
+        self.width += 1
+
+    def append_row(self, row):
+        """
+        Add a row to the end
+        """
+        assert len(row) == self.width
+        self.rows.append(row)
+        self.height += 1
+
+    def is_row_all_zeros(self, r):
+        for e in self.rows[r]:
+            if e != 0:
+                return False
+        return True
+
+    def count_tail_zero_rows(self):
+        """
+        Return the number of rows at the bottom of the matrix that are all zeros
+        """
+        r = self.height - 1
+        while r >= 0 and self.is_row_all_zeros(r):
+            r -= 1
+        return self.height - 1 - r
+
+    def remove_rows(self, start_row, count):
+        # handle negative rows referring to the end
+        if start_row < 0:
+            start_row += self.height
+        if start_row >= self.height or count <= 0:
+            return
+        del self.rows[start_row:start_row+count]
+        self.height = len(self.rows)
+
+    def pivot_row(self, c, start_row):
+        """
+        Find the index of the row with the maximum absolute value in column c
+        """
+        pivot_row_idx = start_row
+        for r in range(start_row+1, self.height):
+            if abs(self.rows[r][c]) > abs(self.rows[pivot_row_idx][c]):
+                pivot_row_idx = r
+        return pivot_row_idx
+
+    def mult_row(self, row_idx, factor):
+        row = self.rows[row_idx]
+        for i in range(len(row)):
+            x = row[i] * factor
+            
+            # normalize to integer
+            if isinstance(x, Fraction) and x.is_integer():
+                x = x.numerator
+                
+            row[i] = x
+
+    def add_row_multiple(self, dest_row, src_row, factor):
+        dest_row = self.rows[dest_row]
+        src_row = self.rows[src_row]
+        for i in range(self.width):
+            x = dest_row[i] + factor * src_row[i]
+
+            # normalize to integer
+            if isinstance(x, Fraction) and x.is_integer():
+                x = x.numerator
+
+            dest_row[i] = x
+
+    def swap_rows(self, r1, r2):
+        if r1 == r2: return
+        tmp = self.rows[r1]
+        self.rows[r1] = self.rows[r2]
+        self.rows[r2] = tmp
+
+    def has_leading_zeros(self, r, count):
+        row = self.rows[r]
+        for c in range(count):
+            if row[c] != 0:
+                return False
+        return True
+
+    def max_col_widths(self):
+        mw = [0] * self.width
+        for r in range(self.height):
+            row = self.rows[r]
+            for c in range(self.width):
+                mw[c] = max(mw[c], len(str(row[c])))
+        return mw
+
+    def vector_mult_entry(self, vector, k):
+        """
+        Return the dot product of row k and a vector
+        """
+        return sum([vector[i] * self.rows[k][i] for i in range(self.width)])
+    
+    def vector_mult(self, v):
+        return [self.vector_mult_entry(v, r) for r in self.height]
+
+    def print(self):
+      col_widths = self.max_col_widths()
+      for row in self.rows:
+        row_str = ' '.join([str(row[i]).rjust(col_widths[i])
+                            for i in range(self.width)])
+        print(row_str)
+
+
+def matrix_apply(matrix, vector):
+    """
+    Multiply a matrix by a vector to get a vector.
+    Length of input vector must be equal to the matrix width.
+    Leght of output vector will be the matrix height.
+    """
+    height = len(matrix)
+    width = len(matrix[0])
+    
+    if len(vector) != width:
+        raise Exception(f'Muliplying {height}x{width} by '
+                        f'vector length {len(vector)}; must be {width}')
+
+    out_vector = [0] * height
+
+    for r in range(height):
+        for c in range(width):
+            out_vector[r] += matrix[r][c] * vector[c]
+            
+    return out_vector
+
+        
+def matrix_row_reduce(matrix):
+    """
+    Take a matrix in the form:
+    [x x x x
+     x x x x 
+     x x x x]
+    and use row operations to convert it to:
+    [1 0 0 z1
+     0 1 0 z2
+     0 0 1 z3]
+  
+    Each cell is an integer or a fractions.Fraction
+    """
+    height = len(matrix)
+    width = len(matrix[0])
+
+    VERBOSE = False
+
+    def pivot_row(matrix, c, start_row):
+        """
+        Find the row with the maximum absolute value in column c
+        """
+        pivot_row_idx = start_row
+        for r in range(start_row+1, height):
+            if abs(matrix[r][c]) > abs(matrix[pivot_row_idx][c]):
+                pivot_row_idx = r
+        return pivot_row_idx
+  
+    def mult_row(matrix, row_idx, factor):
+        row = matrix[row_idx]
+        for i in range(len(row)):
+            x = row[i] * factor
+            
+            # normalize to integer
+            if isinstance(x, Fraction) and x.is_integer():
+                x = x.numerator
+                
+            row[i] = x
+  
+    def add_row_multiple(matrix, dest_row, src_row, factor):
+        dest_row = matrix[dest_row]
+        src_row = matrix[src_row]
+        for i in range(len(dest_row)):
+            dest_row[i] += factor * src_row[i]
+
+            # normalize to integer
+            if isinstance(dest_row[i], Fraction) and dest_row[i].is_integer():
+                dest_row[i] = dest_row[i].numerator
+
+    def swap_rows(matrix, r1, r2):
+        if r1 == r2: return
+        tmp = matrix[r1]
+        matrix[r1] = matrix[r2]
+        matrix[r2] = tmp
+
+    def has_leading_zeros(matrix, r, count):
+        row = matrix[r]
+        for c in range(count):
+            if row[c] != 0:
+                return False
+        return True
+
+    r = c = 0
+
+    while c < width and r < height:
+        pivot_r = pivot_row(matrix, c, r)
+        if matrix[pivot_r][c] == 0:
+            c += 1
+            continue
+
+        swap_rows(matrix, r, pivot_r)
+        if VERBOSE:
+            print(f'swap rows {r} and {pivot_r}')
+            matrix_print(matrix)
+            print()
+
+        assert has_leading_zeros(matrix, r, c)
+
+        if matrix[r][c] != 1:
+            factor = Fraction(1, matrix[r][c])
+            mult_row(matrix, r, factor)
+            if VERBOSE:
+                print(f'Normalize leading entry row {r}')
+                matrix_print(matrix)
+                print()
+
+        assert matrix[r][c] == 1
+
+        for cancel_r in range(height):
+            if cancel_r == r: continue
+            if matrix[cancel_r][c] != 0:
+                factor = -matrix[cancel_r][c]
+                add_row_multiple(matrix, cancel_r, r, factor)
+                if VERBOSE:
+                    print(f'cancel row {cancel_r}, {factor=}')
+                    matrix_print(matrix)
+                    print()
+        
+        c += 1
+        r += 1
+    
+        
+  
+    # print('before modification')
+    # matrix_print(matrix)
+  
+    # for diag_idx in range(height):
+    # for diag_idx in range(height):
+    #     # make the leading element 1 in this row
+    #     factor = Fraction(1, matrix[diag_idx][diag_idx])
+    #     mult_row(matrix, diag_idx, factor)
+        
+    #     print(f'simplify row {diag_idx}')
+    #     matrix_print(matrix)
+    
+    #     for row_id in range(height):
+    #         if row_id == diag_idx:
+    #             continue
+    
+    #         leading_value = matrix[row_id][diag_idx]
+    #         factor = -leading_value
+    #         add_row_multiple(matrix, row_id, diag_idx, factor)
+            
+    #         print(f'row {row_id}')
+    #         matrix_print(matrix)
+
         
 def matrix_solve(matrix):
     """
@@ -954,12 +1309,13 @@ def matrix_solve(matrix):
     width = len(matrix[0])
     assert height+1 == width
   
-    def multRow(matrix, row_idx, factor):
+    def mult_row(matrix, row_idx, factor):
         row = matrix[row_idx]
         for i in range(len(row)):
             row[i] *= factor
+            
   
-    def addRowMultiple(matrix, dest_row, src_row, factor):
+    def add_row_multiple(matrix, dest_row, src_row, factor):
         dest_row = matrix[dest_row]
         src_row = matrix[src_row]
         for i in range(len(dest_row)):
@@ -972,7 +1328,8 @@ def matrix_solve(matrix):
     for diag_idx in range(height):
         # make the leading element 1 in this row
         factor = Fraction(1, matrix[diag_idx][diag_idx])
-        multRow(matrix, diag_idx, factor)
+        mult_row(matrix, diag_idx, factor)
+        
         # print(f'simplify row {diag_idx}')
         # matrix_print(matrix)
     
@@ -982,7 +1339,8 @@ def matrix_solve(matrix):
     
             leading_value = matrix[row_id][diag_idx]
             factor = -leading_value
-            addRowMultiple(matrix, row_id, diag_idx, factor)
+            add_row_multiple(matrix, row_id, diag_idx, factor)
+            
             # print(f'row {row_id}')
             # matrix_print(matrix)
 

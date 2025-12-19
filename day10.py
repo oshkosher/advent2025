@@ -13,7 +13,7 @@ import sys, os, re, itertools, math, collections, itertools
 import numpy as np
 
 # linear programming library
-# import pulp
+import pulp
 
 # change to the directory of the script so relative references work
 from pathlib import Path
@@ -156,11 +156,15 @@ def joltage_presses(machine):
     height = len(machine.jolts)
     width = len(machine.buttons)
 
+    A_ints = [[0] * width for _ in range(height)]
+
     A = np.zeros((height, width))
     for c in range(width):
         button = machine.buttons[c]
         for r in button:
             A[r][c] = 1
+
+            A_ints[r][c] = 1
 
     goal = np.array(machine.jolts)
 
@@ -186,6 +190,8 @@ def joltage_presses(machine):
     
     soln_float = [v.value() for v in x_vars]
     soln = [round(v) for v in soln_float]
+
+    print(f'problem_list.append( (\n{A_ints!r},\n  {machine.jolts!r},\n  {soln!r}\n))')
     
     # soln_vector = np.array(soln)
     # print(f'A x = {A @ soln_vector}')
@@ -426,11 +432,13 @@ def joltage_output_math(machine):
     
         
 def part2(machines):
+    print('problem_list = []')
+    
     total_presses = 0
     for i, machine in enumerate(machines):
-        # print(f'machine {i}')
+        print(f'# machine {i}')
         total_presses += joltage_presses(machine)
-    print(total_presses)
+    # print(total_presses)
     
         
 def part2_list_problems(machines):
@@ -446,10 +454,10 @@ if __name__ == '__main__':
     machines = [Machine.parse(line) for line in input]
   
     t0 = time.perf_counter_ns()
-    part1(machines)
+    # part1(machines)
     t1 = time.perf_counter_ns()
-    # part2(machines)
-    part2_list_problems(machines)
+    part2(machines)
+    # part2_list_problems(machines)
     t2 = time.perf_counter_ns()
     # print(f'part1 {(t1-t0)/1e6:.2f} millis')
     # print(f'part2 {(t2-t1)/1e6:.2f} millis')
