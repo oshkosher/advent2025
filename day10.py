@@ -191,7 +191,7 @@ def joltage_presses(machine):
     soln_float = [v.value() for v in x_vars]
     soln = [round(v) for v in soln_float]
 
-    print(f'problem_list.append( (\n{A_ints!r},\n  {machine.jolts!r},\n  {soln!r}\n))')
+    # print(f'problem_list.append( (\n{A_ints!r},\n  {machine.jolts!r},\n  {soln!r}\n))')
     
     # soln_vector = np.array(soln)
     # print(f'A x = {A @ soln_vector}')
@@ -432,13 +432,13 @@ def joltage_output_math(machine):
     
         
 def part2(machines):
-    print('problem_list = []')
+    # print('problem_list = []')
     
     total_presses = 0
     for i, machine in enumerate(machines):
-        print(f'# machine {i}')
+        # print(f'# machine {i}')
         total_presses += joltage_presses(machine)
-    # print(total_presses)
+    print(total_presses)
     
         
 def part2_list_problems(machines):
@@ -454,10 +454,10 @@ if __name__ == '__main__':
     machines = [Machine.parse(line) for line in input]
   
     t0 = time.perf_counter_ns()
-    # part1(machines)
+    part1(machines)
     t1 = time.perf_counter_ns()
     part2(machines)
     # part2_list_problems(machines)
     t2 = time.perf_counter_ns()
-    # print(f'part1 {(t1-t0)/1e6:.2f} millis')
-    # print(f'part2 {(t2-t1)/1e6:.2f} millis')
+    print(f'part1 {(t1-t0)/1e6:.2f} millis')
+    print(f'part2 {(t2-t1)/1e6:.2f} millis')

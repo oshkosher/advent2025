@@ -1040,12 +1040,15 @@ class Matrix:
             self.rows[r].append(col[r])
         self.width += 1
 
-    def append_row(self, row):
+    def append_row(self, row = None):
         """
         Add a row to the end
         """
-        assert len(row) == self.width
-        self.rows.append(row)
+        if row == None:
+            self.rows.append([0] * self.width)
+        else:
+            assert len(row) == self.width
+            self.rows.append(row)
         self.height += 1
 
     def is_row_all_zeros(self, r):
