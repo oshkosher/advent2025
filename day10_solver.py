@@ -307,6 +307,13 @@ class ApplyFree:
                 x -= coeff * v[j]
             v[i] = x
 
+            
+def fract_to_int(v):
+    if isinstance(v, Fraction) and v.denominator == 1:
+        return v.numerator
+    else:
+        return v
+
 
 def apply_free_cols(A, computed_cols, free_cols, v):
     """
@@ -329,65 +336,44 @@ def apply_free_cols(A, computed_cols, free_cols, v):
             value -= row[fc] * v[fc]
             
         # reduce to integer if possible
-        if isinstance(value, Fraction) and value.denominator == 1:
-            value = value.numerator
+        value = fract_to_int(value)
 
         # print(f'  write v[{c}] = {value}')
         v[c] = value
-    
+
+
+def print_free_vectors(A, computed_cols, free_cols):
+    """
+    Incrementing each free column changes the solution vector a bit.
+    Output that bit for each free column.
+    """
+    n_vars = A.width-1
+    base_vec = [0] * n_vars
+    apply_free_cols(A, computed_cols, free_cols, base_vec)
+
+    # print(f'finding free vectors for {free_cols!r}')
+
+    v = [0] * n_vars
+    for c in free_cols:
+        v[c] = 1
+        apply_free_cols(A, computed_cols, free_cols, v)
+        diff = [fract_to_int(v[i] - base_vec[i]) for i in range(n_vars)]
+        # print(f'col {c}: {diff!r}')
+        v[c] = 0
 
 
 def solve_non_recursive(original_matrix, A, goal_vector,
-                        soln_max_values):
+                        soln_max_values, free_cols):
 
-    A.row_reduce()
-    free_cols = find_free_var_columns(A)
     n_free = len(free_cols)
+    if n_free == 0:
+        return A.column(-1)[:A.width-1]
+    
     free_col_max_values = [soln_max_values[f] for f in free_cols]
     computed_cols = [x for x in range(A.width-1) if x not in free_cols]
 
-    print(f'after reduction, free cols = {free_cols!r}, maxes {free_col_max_values!r}, computed cols = {computed_cols!r}')
+    # print(f'after reduction, free cols = {free_cols!r}, maxes {free_col_max_values!r}, computed cols = {computed_cols!r}')
     # A.print()
-
-    """
-    # make sure there is a zero row for each free column
-    n_zero_rows = A.count_tail_zero_rows()
-
-    if n_zero_rows < len(free_cols):
-        print(f'append {n_free - n_zero_rows} zero rows')
-        # if there are not enough zero rows, add some
-        for _ in range(n_free - n_zero_rows):
-            A.append_row()
-        A.print()
-    elif n_zero_rows > len(free_cols):
-        # if there are too many, remove the excess
-        print(f'remove {n_zero_rows - n_free} zero rows')
-        excess = n_zero_rows - len(free_cols)
-        A.remove_rows(a.height - excess, excess)
-        A.print()
-
-    # put a 1 in a free row for each free column
-    first_free_row = A.height - n_free
-    for i, c in enumerate(free_cols):
-        A[first_free_row+i][c] = 1
-
-    print('mark each free column')
-    A.print()
-    
-    B = Matrix(height = A.height, width = A.width)
-
-    free_values = [13, 27, 19]
-    matrix_paste(B, A)
-    for i in range(n_free):
-        B[first_free_row+i][-1] = free_values[i]
-
-    print('substituted')
-    B.print()
-
-    B.row_reduce()
-    print('reduced')
-    B.print()
-    """
 
     best_soln = None
     best_sum = math.inf
@@ -395,6 +381,8 @@ def solve_non_recursive(original_matrix, A, goal_vector,
     v = [0] * (A.width-1)
     first_free_idx = free_cols[0]
     end = free_col_max_values[0] + 1
+
+    print_free_vectors(A, computed_cols, free_cols)
 
     def inc(v):
         i = len(free_cols)-1
@@ -406,7 +394,8 @@ def solve_non_recursive(original_matrix, A, goal_vector,
             v[vi] = 0
             i -= 1
         return False
-            
+
+    # iterate through all possible values of the free variables
     while v[first_free_idx] < end:
         apply_free_cols(A, computed_cols, free_cols, v)
         # print(repr(v))
@@ -414,7 +403,7 @@ def solve_non_recursive(original_matrix, A, goal_vector,
             s = sum(v)
             # print(f'  is solution size {s}')
             if s < best_sum:
-                print(f'  best so far sum={s} {v!r}')
+                # print(f'  best so far sum={s} {v!r}')
                 best_soln = v[:]
                 best_sum = s
 
@@ -449,22 +438,16 @@ def solve(original_matrix, b, problem_idx, known_soln):
     augmented = original_matrix.copy()
     augmented.append_col(b)
 
-    # augmented.row_reduce()
-    # print('initial reduction')
-    # augmented.print()
-    # print()
+    augmented.row_reduce()
+    free_cols = find_free_var_columns(augmented)
+    n_free = len(free_cols)
+    # print(f'{n_free=}')
     
-    # free_cols = find_free_var_columns(augmented)
-    # print(f'{len(free_cols)} free columns, problem {problem_idx}: {free_cols!r}')
-    # print()
-    # return
-
-    # recurse_data = RecurseData(original_matrix, b, soln_max_values, 2**31, [], [])
-    # solve_recurse(recurse_data, augmented)
-    # soln = recurse_data.best_soln
-
-    soln = solve_non_recursive(original_matrix, augmented, b, soln_max_values)
-    print(repr(soln))
+    timer_ns = time.perf_counter_ns()
+    soln = solve_non_recursive(original_matrix, augmented, b, soln_max_values,
+                               free_cols)
+    timer_ns = time.perf_counter_ns() - timer_ns
+    print(f'{problem_idx}\t{timer_ns / 1e9:.6f}s\t{n_free}\t{soln!r}')
 
     soln_size = sum(soln)
     
@@ -502,15 +485,23 @@ def reorder_columns(original, b):
 def find_solutions(problem_list):
     skip_list = frozenset([23, 70, 87, 105, 108, 133, 137, 138])
     # for i, (A, b, x) in enumerate(problem_list[6:7]):
-    for i, (A, b, x) in enumerate(problem_list[23:24]):
-        # if i in skip_list: continue
+    # for i, (A, b, x) in enumerate(problem_list[23:24]):
+    for i, (A, b, x) in enumerate(problem_list):
+        if i in skip_list: continue
         matrix = Matrix(A)
-        print(f'problem {i}')
+        # print(f'problem {i}')
         # print(f'known solution {x!r} (size={sum(x)})')
         solve(matrix, b, i, x)
+        
 
         # reorder_columns(matrix, b)
 
+
+def fraction_str(f):
+    return f'({f.numerator}/{f.denominator})'
+
+
+Fraction.__str__ = fraction_str
 
 # test_solutions(problem_list)
 
