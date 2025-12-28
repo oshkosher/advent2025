@@ -11,15 +11,18 @@ Ed Karrels, ed.karrels@gmail.com, December 2025
 # common standard libraries
 import sys, os, re, itertools, math, collections, itertools
 import numpy as np
+from math import floor, ceil
 
 # linear programming library
-import pulp
+# import pulp
 
 # change to the directory of the script so relative references work
 from pathlib import Path
 script_dir = Path(__file__).resolve().parent
 os.chdir(str(script_dir))
 from advent import *
+
+# import day10_solver
 
 
 class Machine:
@@ -107,26 +110,15 @@ def part1(machines):
     print(button_press_total)
 
 
-def joltage_presses(machine):
+def joltage_presses_using_pulp(machine):
     """
-    1*(3)
-    3*(1,3)
-    0*(2)
-    3*(2,3)
-    1*(0,2)
-    2*(0,1)
+    Use the Pulp linear programming library to solve the problem.
+    This was my original solution, but I wrote a new solver from scratch
+    that is about 20x faster.
 
-    0: 3
-    1: 5
-    2: 4
-    3: 7
-
-    This problem is finding a vector x such that A x = b in an
-    underconstrained system, looking for a minimum sum of the elements
-    in vector x.
-    Also:
-      - the input matrix is all 0's and 1's.
-      
+    Find a vector x such that A x = b in an underconstrained system,
+    looking for a minimum sum of the elements in vector x.
+    Also, the input matrix is all 0's and 1's.
     
     [0 0 0 0 1 1  * [1 = [3
      0 1 0 0 0 1     3    5
@@ -134,23 +126,6 @@ def joltage_presses(machine):
      1 1 0 1 0 0]    3    7]
                      1    
                      2]
-
-    Matrix
-      each column is the bits in a button
-      one column per button
-    goal = jolts vector
-    solution vector = number of times each buttons should be pressed
-
-    1 * 1000
-   +3 * 1010
-   +0 *  100
-   +3 * 1100
-   +1 *  101
-   +2 *   11
-
-    FrobeniusSolve[{1000, 1010, 100, 1100, 101, 11}, 7453]
-      finds the solution, along with 4000 others
-    
     """
 
     height = len(machine.jolts)
@@ -204,248 +179,386 @@ def joltage_presses(machine):
     return sum(soln)
 
 
-def joltage_output_math(machine):
+def max_values(A, jolts):
     """
-    Just output the math problems so I can use them as direct sample input
-    while working on my own solver.
+    Given the original matrix input and goal joltages,
+    returns an array of length len(A[0]) containing the maximum possible
+    value of each solution entry.
 
-    Output the boolean matrix A and goal vector b, and whether
-    the problem is overconstrained, underconstrained, or conventionally
-    solvable.
-    
-    [0 0 0 0 1 1  * [1 = [3
-     0 1 0 0 0 1     3    5
-     0 0 1 1 1 0     0    4
-     1 1 0 1 0 0]    3    7]
-                     1    
-                     2]
+    This is computed by taking the minimum of at all the entries in
+    jolts to which column c contributes. Since the largest factor in
+    the matrix is 1 and all solution vector entries are non-negative,
+    if an entry in the solution vector is larger than this value it
+    will cause the goal joltage to be too high.
+    """
+    maxes = [math.inf] * len(A[0])
 
-    augmented matrix:
-      0 0 0 0 1 1 3
-      0 1 0 0 0 1 5
-      0 0 1 1 1 0 4
-      1 1 0 1 0 0 7
-
-    row-reduced:
-    1 0 0 1 0 -1 2
-    0 1 0 0 0  1 5
-    0 0 1 1 0 -1 1
-    0 0 0 0 1  1 3
-
-    meaning:
-      x0 + x3 - x5 = 2
-      x1 + x5 = 5
-      x2 + x3 - x5 = 1
-      x4 + x5 = 3
-
-    solved for each variable independently:
-      x0 = 2 - x3 + x5
-      x1 = 5 - x5
-      x2 = 1 - x3 + x5
-      x3 = 1 - x2 + x5
-      x4 = 3 - x5
-      x5 = 5 - x1
-
-      Starting from x1, its possible values are 0..5
-        scanning value: x1
-      Then x5 = 5 - x1
-        compuated value: x1
-      And x4 = 3 - x5 = 3 - (5 - x1) = x1 - 2
-        computed value: x4
-      x0 + x3 = x5 + 2
-        possible values x0 = 0 .. x5+2
-        scanning value: x0
-        x3 = 0 .. x5 + 2 - x0
-        computed value: x3
-      x2 = 1 - x3 + x5
-        computed value: x2
-
-    Or based on the original matrix:
-
-    [0 0 0 0 1 1   = [3
-     0 1 0 0 0 1      5
-     0 0 1 1 1 0      4
-     1 1 0 1 0 0]     7]
-
-     x4 + x5 = 3
-     x1 + x5 = 5
-     x2 + x3 + x4 = 4
-     x0 + x1 + x3 = 7
-    
-    Let x1 = 3. That simplified two formulas:
-
-    Apply this to augmented matrix by adding a row:
-    
-     0 0 0 0 1 1 3
-     0 1 0 0 0 1 5
-     0 0 1 1 1 0 4
-     1 1 0 1 0 0 7
-     0 1 0 0 0 0 3
-
-    Simplify the matrix by subtracting that row from everyone with an x1:
-
-     0 0 0 0 1 1 3
-     0 0 0 0 0 1 2
-     0 0 1 1 1 0 4
-     1 0 0 1 0 0 4
-     0 1 0 0 0 0 3
-
-     x4 + x5 = 3
-     x5 = 2
-     x2 + x3 + x4 = 4
-     x0 + x3 = 4
-    
-    x5 is now solved, subtract that from other rows:
-    
-     0 0 0 0 1 0 1
-     0 0 0 0 0 1 2
-     0 0 1 1 1 0 4
-     1 0 0 1 0 0 4
-     0 1 0 0 0 0 3
-
-     x4 = 1
-     x2 + x3 + x4 = 4
-     x0 + x3 = 4
-
-    x4 solved, use it:
-    
-     0 0 0 0 1 0 1
-     0 0 0 0 0 1 2
-     0 0 1 1 0 0 3
-     1 0 0 1 0 0 4
-     0 1 0 0 0 0 3
-
-    When guessing a value, choose a value in a formula with a minimum RHS.
-     x2 + x3 = 3
-     x0 + x3 = 4
-
-    Sample problem 2
-
-      1 0 1 1 0  7
-      0 0 0 1 1  5
-      1 1 0 1 1 12
-      1 1 0 0 1  7
-      1 0 1 0 1  2
-
-    row-reduced
-
-      1  0  1  0  0  2
-      0  1 -1  0  0  5
-      0  0  0  1  0  5
-      0  0  0  0  1  0
-      0  0  0  0  0  0
-
-      x0 + x2 = 2
-      x1 - x2 = 5  or x1 = 5 + x2
-      x3 = 5
-      x4 = 0
-
-      try x0 = 0 (remove zero rows, add a row for new value)
-
-      1  0  1  0  0  2
-      0  1 -1  0  0  5
-      0  0  0  1  0  5
-      0  0  0  0  1  0
-      1  0  0  0  0  0
-        reduce
-      1  0  0  0  0  0
-      0  1  0  0  0  7
-      0  0  1  0  0  2
-      0  0  0  1  0  5
-      0  0  0  0  1  0
-    
-
-      try x0 = 1
-        x2 = 1
-        x1 = 6
-      try x0 = 2
-
-      1  0  1  0  0  2
-      0  1 -1  0  0  5
-      0  0  0  1  0  5
-      0  0  0  0  1  0
-      1  0  0  0  0  2
-        reduce
-      1  0  0  0  0  2
-      0  1  0  0  0  5
-      0  0  1  0  0  0
-      0  0  0  1  0  5
-      0  0  0  0  1  0
-
-        preferred, for minimum total
-
-      soln = [2, 5, 0, 5, 0]
+    for r, row in enumerate(A):
+        for c, e in enumerate(row):
+            if e and jolts[r] < maxes[c]:
+                maxes[c] = jolts[r]
+    return maxes
 
 
-    Sample problem 3
-      1 1 1 0 10
-      1 0 1 1 11
-      1 0 1 1 11
-      1 1 0 0  5
-      1 1 1 0 10
-      0 0 1 0  5
-
-    row-reduced
-      1  0  0  1  6
-      0  1  0 -1 -1
-      0  0  1  0  5
-      0  0  0  0  0
-      0  0  0  0  0
-      0  0  0  0  0
-
-      x0 + x3 = 6
-      x1 - x3 = -1
-      x2 = 5
-
-    After row-reduction, the leading entry in every nonempty row will be 1.
-    Since this started with a boolean/binary matrix, will all the remaining
-    entries (except the last column) be 1, 0, or -1?
+def are_all_non_negative(lst):
+    for e in lst:
+        if e < 0:
+            return False
+    return True
 
 
-    
+def are_all_integers(lst):
+    for e in lst:
+        if not is_integer(e):
+            return False
+    return True
 
+
+def find_free_var_columns(matrix):
+    """
+    Given an augmented matrix in row-reduced eschelon form, where
+    each pivot column has a leading '1'.
+    """
+    without_pivot = set(range(matrix.width-1))
+    for r, row in enumerate(matrix):
+        for c, e in enumerate(row[:-1]):
+            if e != 0:
+                without_pivot.remove(c)
+                break
+    return list(without_pivot)
+
+
+def is_integer(x):
+    return (isinstance(x, int) or
+            (isinstance(x, Fraction) and x.denominator == 1))
+
+            
+def fract_to_int(v):
+    if isinstance(v, Fraction) and v.denominator == 1:
+        return v.numerator
+    else:
+        return v
+
+
+def apply_fract_to_int(vec):
+    for i in range(len(vec)):
+        if isinstance(vec[i], Fraction) and vec[i].denominator == 1:
+            vec[i] = vec[i].numerator
+
+
+def compute_solution_vectors(A, free_cols):
+    """
+    A: RREF augmented matrix
+    free_cols: list of free columns
+
+    Returns a 2-tuple:
+      0: base vector of length A.width-1
+      1: list of (len(free_cols)+1) free vectors, each of length A.width-1
+
+    All solution vectors are linear combinations of base and the free vectors.
+    For example: result[0] + 2*result[1][0] + 5*result[1][1]
     """
 
-    height = len(machine.jolts)
-    width = len(machine.buttons)
+    # length of each vector == length of solution vector
+    n = A.width - 1
 
-    A = [[0] * width for _ in range(height)]
+    n_empty_rows = A.count_tail_zero_rows()
+    n_non_empty_rows = A.height - n_empty_rows
 
-    for c in range(width):
+    base = A.column(-1)[:n_non_empty_rows]
+    for c in free_cols:
+        base[c:c] = [0]
+
+    # print(f'base_vec={base!r}')
+
+    if len(base) != n:
+        print(f'bad base len, expected {n}, got {len(base)}')
+        A.print()
+    
+    assert len(base) == n
+
+    free_vecs = []
+    for c in free_cols:
+        assert A.height <= A.width-1
+        v = [0] * n
+
+        read_r = 0
+        for r in range(n):
+            if r in free_cols:
+                if r == c:
+                    v[r] = 1
+                else:
+                    v[r] = 0
+            else:
+                v[r] = -A[read_r][c]
+                read_r += 1
+        
+        free_vecs.append(v)
+
+        # print(f'free_vec[{c}] = {v!r}')
+
+    return base, free_vecs
+
+
+def add_scaled_vector(dest, src, v, factor = 1):
+    for i in range(len(dest)):
+        dest[i] = src[i] + v[i] * factor
+
+
+def trim_search_range(v, dv, lo, hi):
+    """
+    v: a base vector
+    dv: a difference vector
+    lo: minimum factor to check
+    hi: maximum factor to check
+
+    Figure out what range of k (bounded by [lo:hi]) yields
+    non-negative values for all entries in (v + k dv).
+
+    Also we want to find the solution with the minimum sum of entries
+    in (v + k dv), so this uses the sum of values in dv to determine
+    whether to search with increasing k or decreasing k, such that the
+    first solution found will be the best.
+
+    Result is a range object that defines the search range and direction.
+    """
+
+    verbose = False
+
+    for i in range(len(v)):
+        if v[i] >= 0:
+            if dv[i] < 0:
+                limit = floor(v[i] / -dv[i])
+                hi = min(limit, hi)
+                if verbose:
+                    print(f'column {i} stop at {limit}: {lo}..{hi}')
+        else:
+            if dv[i] <= 0:
+                if verbose:
+                    print(f'column {i} no-go x={v[i]} dx={dv[i]}')
+                hi = -1
+            else:
+                limit = ceil(v[i] / -dv[i])
+                lo = max(limit, lo)
+                if verbose:
+                    print(f'column {i} start at {limit}: {lo}..{hi}')
+
+        if lo > hi:
+            if verbose:
+                print('stop now')
+            return range(0, 0, 1)
+
+    assert lo <= hi
+    
+    if sum(dv) < 0:
+        if verbose:
+            print(f'test {hi} down to {lo}')
+        return range(hi, lo-1, -1)
+    else:
+        if verbose:
+            print(f'test {lo} up to {hi}')
+        return range(lo, hi+1, +1)
+
+
+def vec_add_mult_sum_ints(v, dv, k):
+    """
+    Checks if all entries in (v + k dv) are integers.
+    If so, return their sum.
+    Otherwise return None.
+    """
+    s = 0
+    for i in range(len(v)):
+        x = v[i] + k * dv[i]
+        # print(f'  v[{i}] = {x}')
+        if not is_integer(x):
+            return None
+        s += x
+
+    assert is_integer(s)
+    return fract_to_int(s)
+        
+
+def solve_free1(max_value, base_vec, free_vec):
+    """
+    Solve a system with one free variable.
+    base_vec: null space base vector
+    free_vec: null space free vector. The null space is all vectors of the
+      form base_vec + k * free_vec
+
+    Depending on whether the sum of free_vec is positive or negative,
+    count up from 0 or down from max_value. Return the first solution that
+    is all non-negative and integers.
+    """
+    
+    search_range = trim_search_range(base_vec, free_vec, 0, max_value)
+    for k in search_range:
+        s = vec_add_mult_sum_ints(base_vec, free_vec, k)
+        if s:
+            return s
+        
+    return 0
+
+
+def solve_free2_visual(max_values, base_vec, free_vecs):
+    """
+    Given a problem with two free variables, draw a 2-d grid of
+    solutions and non-solutions.
+    """
+    v = [0] * len(base_vec)
+    w = [0] * len(base_vec)
+
+    best_r = -1
+    best_c = -1
+    best_sum = math.inf
+    best_soln = [0]
+
+    grid = grid_create(max_values[0]+1, max_values[1]+1, True)
+    
+    for r in range(max_values[0]+1):
+        add_scaled_vector(w, base_vec, free_vecs[0], r)
+        for c in range(max_values[1]+1):
+            add_scaled_vector(v, w, free_vecs[1], c)
+            apply_fract_to_int(v)
+            
+            all_ints = are_all_integers(v)
+            all_pos = are_all_non_negative(v)
+
+            if all_ints:
+                if all_pos:
+                    grid[r][c] = '#'
+                    s = sum(v)
+                    if s < best_sum:
+                        best_r = r
+                        best_c = c
+                        best_sum = s
+                        best_soln = v[:]
+                else:
+                    grid[r][c] = '-'
+            else:
+                grid[r][c] = '/'
+
+    grid[best_r][best_c] = '@'
+    grid_print(grid)
+    
+    return best_soln
+
+
+def solve_free2(max_values, base_vec, free_vecs):
+    """
+    Solve a system with two free variables.
+    """
+    v = [0] * len(base_vec)
+    w = [0] * len(base_vec)
+
+    best_sum = math.inf
+
+    for r in range(max_values[0]+1):
+        add_scaled_vector(w, base_vec, free_vecs[0], r)
+        search_range = trim_search_range(w, free_vecs[1], 0, max_values[1])
+        
+        for c in search_range:
+            s = vec_add_mult_sum_ints(w, free_vecs[1], c)
+            if s is not None:
+                if s < best_sum:
+                    best_sum = s
+                break
+                
+    return best_sum
+
+
+def solve_free3(max_values, base_vec, free_vecs):
+    """
+    Solve a system with three free variables.
+    The input doesn't contain anything larger than three.
+    """
+    assert len(free_vecs) == 3 and len(max_values) == 3
+    v0 = [0] * len(base_vec)
+    v1 = [0] * len(base_vec)
+
+    best_sum = math.inf
+
+    for k0 in range(max_values[0]+1):
+        add_scaled_vector(v0, base_vec, free_vecs[0], k0)
+        for k1 in range(max_values[1]+1):
+            add_scaled_vector(v1, v0, free_vecs[1], k1)
+            
+            search_range = trim_search_range(v1, free_vecs[2], 0, max_values[2])
+
+            for k2 in search_range:
+                s = vec_add_mult_sum_ints(v1, free_vecs[2], k2)
+                if s:
+                    if s < best_sum:
+                        best_sum = s
+                    break
+        
+    return best_sum
+    
+
+def solve(original_matrix, b):
+    
+    assert len(b) == original_matrix.height
+
+    n_vars = original_matrix.width
+    soln_max_values = max_values(original_matrix, b)
+    assert n_vars == len(soln_max_values)
+
+    # augment the matrix with the goal values
+    A = original_matrix.copy()
+    A.append_col(b)
+    A.row_reduce()
+
+    # remove empty rows at the bottom
+    n_zero_rows = A.count_tail_zero_rows()
+    A.remove_rows(A.height - n_zero_rows, n_zero_rows)
+
+    # list free columns
+    free_cols = find_free_var_columns(A)
+    n_free = len(free_cols)
+
+    # compute the null space
+    # every vector of the form base_vec + k * free_vecs[i]
+    # is a solution to the matrix
+    base_vec, free_vecs = compute_solution_vectors(A, free_cols)
+        
+    assert len(free_vecs) == n_free
+
+    # subset of soln_max_values just for the free columns
+    # this is our search space
+    free_maxes = [soln_max_values[free_cols[i]] for i in range(n_free)]
+
+    # specialize the solution for how many free variables there are
+    if n_free == 0:
+        soln = A.column(-1)[:n_vars]
+        soln_size = sum(soln)
+    elif n_free == 1:
+        soln_size = solve_free1(free_maxes[0], base_vec, free_vecs[0])
+    elif n_free == 2:
+        soln_size = solve_free2(free_maxes, base_vec, free_vecs)
+    else:
+        soln_size = solve_free3(free_maxes, base_vec, free_vecs)
+                                   
+    return soln_size
+
+
+def joltage_presses(machine):
+
+    # create a matrix representing what lights up when each
+    # button is pressed
+    A = Matrix(height = len(machine.jolts), width = len(machine.buttons))
+    for c in range(A.width):
         button = machine.buttons[c]
         for r in button:
             A[r][c] = 1
 
-    goal = np.array(machine.jolts)
+    # find the best solution for the matrix
+    return solve(A, machine.jolts)
 
-    print('A = {')
-    for row in A:
-        print('  {' + ', '.join([str(x) for x in row]) + '},')
-    print('}')
-    print('b = ' + repr(machine.jolts))
-    if width > height:
-        print('# solution: underconstrained')
-    elif width < height:
-        print('# solution: overconstrained')
-    else:
-        print('# solution: easy')
-    
         
 def part2(machines):
-    # print('problem_list = []')
-    
     total_presses = 0
     for i, machine in enumerate(machines):
-        # print(f'# machine {i}')
         total_presses += joltage_presses(machine)
     print(total_presses)
-    
-        
-def part2_list_problems(machines):
-    for i, machine in enumerate(machines):
-        print(f'# machine {i}')
-        joltage_output_math(machine)
-        print()
 
 
 if __name__ == '__main__':
@@ -457,7 +570,6 @@ if __name__ == '__main__':
     part1(machines)
     t1 = time.perf_counter_ns()
     part2(machines)
-    # part2_list_problems(machines)
     t2 = time.perf_counter_ns()
-    print(f'part1 {(t1-t0)/1e6:.2f} millis')
-    print(f'part2 {(t2-t1)/1e6:.2f} millis')
+    # print(f'part1 {(t1-t0)/1e6:.2f} millis')
+    # print(f'part2 {(t2-t1)/1e6:.2f} millis')
