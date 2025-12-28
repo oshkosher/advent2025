@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from math import floor, ceil
 
 import signal
-signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+# signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 
 from advent import *
 
@@ -33,24 +33,6 @@ https://typst.app/project/puQShEWsytudqS9E9dHtsj
 
 Slow one with 2 free variables, problem 46
 """
-
-def test_solutions(problem_list):
-    for i, (A, b, x) in enumerate(problem_list):
-        print(f'problem {i}')
-        matrix_print(A)
-        
-        print(f'soln {x!r}')
-    
-        prod = matrix_apply(A, x)
-        print(f'prod {prod!r}')
-        print(f'goal {b!r}')
-    
-        if prod != b:
-            print('  ERROR fail')
-    
-    
-        print()
-
 
 def max_values(A, jolts):
     """
@@ -264,19 +246,14 @@ def solve_free1(A, free_col, max_value, base_vec, free_vec):
     count up from 0 or down from max_value. Return the first solution that
     is all non-negative and integers.
     """
-
-    v = [0] * len(base_vec)
     
     search_range = trim_search_range(base_vec, free_vec, 0, max_value)
     for k in search_range:
-        if vec_add_mult_sum_ints(base_vec, free_vec, k):
-            soln = [0] * len(base_vec)
-            add_scaled_vector(soln, base_vec, free_vec, k)
-            apply_fract_to_int(soln)
-            assert are_all_integers(soln) and are_all_non_negative(soln)
-            return soln
+        s = vec_add_mult_sum_ints(base_vec, free_vec, k)
+        if s:
+            return s
         
-    return None
+    return 0
 
 
 def solve_free2_visual(A, free_cols, max_values,
@@ -328,8 +305,6 @@ def solve_free2(A, max_values, base_vec, free_vecs):
     v = [0] * len(base_vec)
     w = [0] * len(base_vec)
 
-    best_r = -1
-    best_c = -1
     best_sum = math.inf
 
     for r in range(max_values[0]+1):
@@ -340,17 +315,10 @@ def solve_free2(A, max_values, base_vec, free_vecs):
             s = vec_add_mult_sum_ints(w, free_vecs[1], c)
             if s is not None:
                 if s < best_sum:
-                    best_r = r
-                    best_c = c
                     best_sum = s
                 break
                 
-    assert best_r > -1 and best_c > -1
-    add_scaled_vector(v, base_vec, free_vecs[0], best_r)
-    add_scaled_vector(v, v, free_vecs[1], best_c)
-    apply_fract_to_int(v)
-        
-    return v
+    return best_sum
 
 
 def solve_free3(problem_idx, A, max_values, base_vec, free_vecs):
@@ -359,9 +327,7 @@ def solve_free3(problem_idx, A, max_values, base_vec, free_vecs):
     assert len(free_vecs) == 3 and len(max_values) == 3
     v0 = [0] * len(base_vec)
     v1 = [0] * len(base_vec)
-    v2 = [0] * len(base_vec)
 
-    best_coord = None
     best_sum = math.inf
 
     for k0 in range(max_values[0]+1):
@@ -375,18 +341,10 @@ def solve_free3(problem_idx, A, max_values, base_vec, free_vecs):
                 s = vec_add_mult_sum_ints(v1, free_vecs[2], k2)
                 if s:
                     if s < best_sum:
-                        best_coord = k0, k1, k2
                         best_sum = s
                     break
-                
-    assert best_coord
-    k0, k1, k2 = best_coord
-    add_scaled_vector(v0, base_vec, free_vecs[0], k0)
-    add_scaled_vector(v0, v0, free_vecs[1], k1)
-    add_scaled_vector(v0, v0, free_vecs[2], k2)
-    apply_fract_to_int(v0)
         
-    return v0
+    return best_sum
     
 
 def solve(original_matrix, b, problem_idx, known_soln, total_elapsed_ns):
@@ -419,33 +377,40 @@ def solve(original_matrix, b, problem_idx, known_soln, total_elapsed_ns):
     
     if n_free == 0:
         soln = A.column(-1)[:n_vars]
+        soln_size = sum(soln)
     elif n_free == 1:
-        soln = solve_free1(A, free_cols[0], free_maxes[0],
+        soln_size = solve_free1(A, free_cols[0], free_maxes[0],
                            base_vec, free_vecs[0])
     elif n_free == 2:
-        soln = solve_free2(A, free_maxes, base_vec, free_vecs)
+        soln_size = solve_free2(A, free_maxes, base_vec, free_vecs)
     else:
-        soln = solve_free3(problem_idx, A, free_maxes, base_vec, free_vecs)
+        soln_size = solve_free3(problem_idx, A, free_maxes, base_vec, free_vecs)
                                    
     timer_ns = time.perf_counter_ns() - timer_ns
-    print(f'{problem_idx}\t{timer_ns / 1e9:.6f}s\t{n_free}\t{soln!r}')
+    # print(f'{problem_idx}\t{timer_ns / 1e9:.6f}s\t{n_free}\t{soln!r}')
+    print(f'{problem_idx}\t{timer_ns / 1e9:.6f}s\t{n_free}\t{soln_size}')
     total_elapsed_ns[0] += timer_ns
 
-    soln_size = sum(soln)
+    # soln_size = sum(soln)
     
     # print(f'best found:    {recurse_data.best_soln!r} (size={soln_size})')
 
-    if soln_size != sum(known_soln):
-        print(f'  ERROR  known soln = {sum(known_soln)}, I found {soln_size}')
+    if known_soln:
+        if soln_size != sum(known_soln):
+            print(f'  ERROR  known soln = {sum(known_soln)}, I found {soln_size}')
+            
+    return soln_size
 
 
 def find_solutions(problem_list):
+    button_sum = 0
     total_elapsed_ns = [0]
     for i, (A, b, x) in enumerate(problem_list):
         matrix = Matrix(A)
-        solve(matrix, b, i, x, total_elapsed_ns)
+        button_sum += solve(matrix, b, i, x, total_elapsed_ns)
 
     print(f'total solve time: {total_elapsed_ns[0] / 1e9:.6f} sec')
+    print(button_sum)
 
 
 if __name__ == '__main__':
