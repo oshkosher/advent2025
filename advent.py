@@ -52,6 +52,7 @@ matrix_row_reduce(matrix) - apply Gaussian elimination to row-reduce a matrix
 matrix_print(matrix)
 dijkstra(container, origin_node) - applies Dijkstra's algorithm
 md5(s) - returns lowercase base-16 MD5 hash of ASCII string s
+vector_counter(maxes, tups) - iterates multi-base vector
 """
 
 import re, sys, collections, time, math, hashlib
@@ -1138,14 +1139,29 @@ class Matrix:
         return sum([vector[i] * self.rows[k][i] for i in range(self.width)])
     
     def vector_mult(self, v):
-        return [self.vector_mult_entry(v, r) for r in self.height]
+        return [self.vector_mult_entry(v, r) for r in range(self.height)]
 
-    def print(self):
-      col_widths = self.max_col_widths()
-      for row in self.rows:
-        row_str = ' '.join([str(row[i]).rjust(col_widths[i])
-                            for i in range(self.width)])
-        print(row_str)
+    def print(self, with_braces = False):
+        """
+        If with_braces is true, outputs matrix with curly braces, for easy
+        pasting into Mathematica:
+          {{1, 0, 3},
+           {0, 1, -2}}
+        """
+        col_widths = self.max_col_widths()
+        for r, row in enumerate(self.rows):
+            if with_braces:
+                prefix = '{' if r == 0 else ' '
+                suffix = '}' if r == self.height-1 else ','
+                row_str = (prefix + '{' +
+                           ', '.join([str(row[i]).rjust(col_widths[i])
+                                      for i in range(self.width)])
+                           + '}' + suffix)
+            else:
+                row_str = ' '.join([str(row[i]).rjust(col_widths[i])
+                                    for i in range(self.width)])
+                
+            print(row_str)
 
 
 def matrix_apply(matrix, vector):
@@ -1463,6 +1479,44 @@ def md5(s, suffix = None):
     if suffix != None:
         s = s + str(suffix)
     return hashlib.md5(bytes(s, 'ascii')).hexdigest()
+
+
+def vector_counter(max_values, return_tuples = False):
+    """
+    Returns a sequence of vectors of integers where each entry counts
+    from 0 to max_values[k]. For example, given [2, 1] will result in:
+    [(0,0), (0,1), (1,0), (1,1), (2,0), (2,1)]
+
+    If return_tuples is True, rather returning references to the same
+    list, this returns a new tuple each time. Use this if you pass this
+    to something like list(), which saves each returned value.
+    """
+    if len(max_values) == 0:
+        yield None
+        return
+
+    n = len(max_values)
+    v = [0] * n
+
+    is_iterable = False
+
+    while True:
+        if return_tuples:
+            yield tuple(v)
+        else: 
+            yield v
+
+        i = n-1
+        while i >= 0:
+            if v[i] < max_values[i]:
+                v[i] += 1
+                break
+                
+            v[i] = 0
+            i -= 1
+
+        if i < 0:
+            break
       
   
 if __name__ == '__main__':
