@@ -2,6 +2,7 @@
 
 import math
 from dataclasses import dataclass
+from math import floor, ceil
 
 import signal
 signal.signal(signal.SIGPIPE, signal.SIG_DFL)
@@ -9,7 +10,6 @@ signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 from advent import *
 
 from day10_problems import problem_list
-# from day10_small_problems import problem_list
 
 
 """
@@ -29,8 +29,10 @@ hardest problems:
 3 free columns, problem 137: [10, 11, 12]
 3 free columns, problem 138: [10, 11, 12]
 
-"""
+https://typst.app/project/puQShEWsytudqS9E9dHtsj
 
+Slow one with 2 free variables, problem 46
+"""
 
 def test_solutions(problem_list):
     for i, (A, b, x) in enumerate(problem_list):
@@ -51,8 +53,9 @@ def test_solutions(problem_list):
 
 
 def max_values(A, jolts):
-    """Given the original matrix input and goal joltages,
-    return an array of length len(A[0]) containing the maximum possible
+    """
+    Given the original matrix input and goal joltages,
+    returns an array of length len(A[0]) containing the maximum possible
     value of each solution entry.
 
     This is computed by taking the minimum of at all the entries in
@@ -70,33 +73,6 @@ def max_values(A, jolts):
     return maxes
 
 
-def count_column_nonzeros(matrix, c):
-    n = 0
-    for r in range(matrix.height):
-        if matrix[r][c] != 0:
-            n += 1
-    return n
-
-
-def next_unknown(matrix):
-    """
-    Given a matrix in row-reduced form, returns the index of a column
-    that has nonzero values in multiple rows.
-    """
-    # for c in range(matrix.width-1):
-    for c in range(matrix.width-2, 0, -1):
-        if count_column_nonzeros(matrix, c) > 1:
-            return c
-    return -1
-
-
-def are_all_zeros(lst):
-    for e in lst:
-        if e != 0:
-            return False
-    return True
-
-
 def are_all_non_negative(lst):
     for e in lst:
         if e < 0:
@@ -106,8 +82,7 @@ def are_all_non_negative(lst):
 
 def are_all_integers(lst):
     for e in lst:
-        if not isinstance(e, int):
-            # print(f'non-integer {e!r}')
+        if not is_integer(e):
             return False
     return True
 
@@ -126,186 +101,9 @@ def find_free_var_columns(matrix):
     return list(without_pivot)
 
 
-def is_solution_matrix(A, reasons = None):
-    n_variables = A.width-1
-    if A.height < n_variables:
-        if reasons:
-            reasons.append('not enough solved variables')
-        # print('  no good--too short')
-        return False
-    
-    for r, row in enumerate(A.rows):
-        if r < n_variables:
-            if not (are_all_zeros(row[:r])
-                    and 1 == row[r]
-                    and are_all_zeros(row[r+1:n_variables])):
-                # print(f'  no good, row {r} is not a single zero {row!r}')
-                reasons.append('value rows wrong form')
-                return False
-        else:
-            if not are_all_zeros(row):
-                # print(f'  no good, row{r} is no all zeros {row!r}')
-                reasons.append('non-value rows have nonzeros')
-                return False
-
-    is_good = True
-    knowns = A.column(-1)[:n_variables]
-    
-    if not are_all_integers(knowns):
-        # print(f'  no good--cannot have fractions')
-        reasons.append('fractions')
-        is_good = False
-
-    # print(f'check non-negative {A.column(-1)[:n_variables]}')
-    if not are_all_non_negative(knowns):
-        # print(f'  no good--cannot have negatives')
-        reasons.append('negatives')
-        is_good = False
-
-    return is_good
-
-
-@dataclass
-class RecurseData:
-    original: Matrix
-    goal_vector: list
-    soln_max_values: list
-    best_sum: int
-    best_soln: list
-    unknowns: list
-
-
-def solve_recurse(d, A, depth = ''):
-    """
-    Recursively solve the matrix A.
-    Each time an underconstrained column is found, try every value from
-    0 to soln_max_values[column_idx] (inclusive) and recurse.
-
-    Return the solution vector with the lowest sum of values.
-
-    d = RecurseData object that holds my persistent data
-    """
-
-    verbose = 0
-
-    # if verbose > 1:
-    #     print(f'solve_recurse depth {len(depth)}')
-
-    A.row_reduce()
-    if verbose > 2:
-        print('reduced')
-        A.print()
-        print()
-
-    guess_c = next_unknown(A)
-    # print(f'{guess_c=}')
-
-    if guess_c == -1:
-        # solution found?
-
-        if verbose > 1:
-            print(f'{depth}  unknowns = {" ".join([str(x) for x in d.unknowns])}')
-        
-        reasons = []
-        if not is_solution_matrix(A, reasons):
-            if verbose > 1:
-                # print(f'{depth}  not a solution: {", ".join(reasons)}')
-                if verbose > 2:
-                    A.print()
-                    print()
-            return
-
-        soln = A.column(-1)[:A.width-1]
-        soln_sum = sum(soln)
-
-        if verbose:
-            print(f'{depth}solution with sum {soln_sum} found: {soln!r}')
-
-        if soln_sum < d.best_sum:
-            if verbose:
-                print(f'{depth}a new best')
-            d.best_soln = soln
-            d.best_sum = soln_sum
-
-        return
-
-    # if verbose > 1:
-    #     print(f'{guess_c=}')
-
-    # remove junk zero rows from the end
-    n_zero_rows = A.count_tail_zero_rows()
-    A.remove_rows(-n_zero_rows, n_zero_rows)
-
-    # add a row that we'll use to test values
-    A.append_row([0] * A.width)
-    A[-1][guess_c] = 1
-
-    depth = depth + ' '
-
-    # for value in range(0, d.soln_max_values[guess_c]+1):
-
-    d.unknowns.append(0)
-    
-    for value in range(0, d.soln_max_values[guess_c]+1):
-        d.unknowns[-1] = value
-        
-        # make a copy of A to mess with
-        A_copy = A.copy()
-        A_copy[-1][-1] = value
-
-        if verbose:
-            # print(f'{depth}Column {guess_c}, try {value}')
-            if verbose > 2:
-                A_copy.print()
-                print()
-
-        solve_recurse(d, A_copy, depth)
-    
-    del d.unknowns[-1]
-
-
-def matrix_paste(dest, src):
-    assert dest.height == src.height and dest.width == src.width
-    for r in range(dest.height):
-        dest[r][:] = src[r]
-
-
-def write_nonfree_formulas(A, free_cols):
-    """
-    Given a matrix in rref, for each row with a pivot, compute a formula
-    """
-    for row in A:
-        pass
-
-
-class ApplyFree:
-    """
-    Given a matrix in rref and a list of the free columns, prepare
-    an object that can quickly compute the values of all variables
-    given the values of the free variables.
-
-    For example, if row 0 is: 1 0 0 2 3 5 and free_cols = [3,4]
-    then b[0] = 5 - (2 * v[3] + 3 * v[4])
-    
-    """
-    
-    def __init__(self, rref_mx, free_cols):
-        """
-        free_cols list of indices of the free columns
-        """
-        # colum index, constant, coefficients of each free column
-        self.cols = []
-
-    def apply(self, v):
-        """
-        The value of each free column has been set already in v.
-        Use those to set the rest.
-        """
-        for i, const, coeffs in self.cols:
-            x = const
-            for j, coeff in coeffs:
-                x -= coeff * v[j]
-            v[i] = x
+def is_integer(x):
+    return (isinstance(x, int) or
+            (isinstance(x, Fraction) and x.denominator == 1))
 
             
 def fract_to_int(v):
@@ -315,139 +113,323 @@ def fract_to_int(v):
         return v
 
 
-def apply_free_cols(A, computed_cols, free_cols, v):
+def apply_fract_to_int(vec):
+    for i in range(len(vec)):
+        if isinstance(vec[i], Fraction) and vec[i].denominator == 1:
+            vec[i] = vec[i].numerator
+
+
+def compute_solution_vectors(A, free_cols):
     """
-    A is the augmented, rref matrix
-    
-    computed_cols is a list of column indices that are not free
-    free_cols is a list of the free columns.
-    
-    v is a list of column values where the values of the free columns
-    have been filled in.
+    A: RREF augmented matrix
+    free_cols: list of free columns
 
-    This uses the values of the free columns to fill in the rest of v.
+    Returns a 2-tuple:
+      0: base vector of length A.width-1
+      1: list of (len(free_cols)+1) free vectors, each of length A.width-1
+
+    All solution vectors are linear combinations of base and the free vectors.
+    For example: result[0] + 2*result[1][0] + 5*result[1][1]
     """
-    # print('apply_free_cols')
-    for r, c in enumerate(computed_cols):
-        # print(f'row {r}')
-        row = A[r]
-        value = row[-1]
-        for fc in free_cols:
-            value -= row[fc] * v[fc]
-            
-        # reduce to integer if possible
-        value = fract_to_int(value)
 
-        # print(f'  write v[{c}] = {value}')
-        v[c] = value
+    # length of each vector == length of solution vector
+    n = A.width - 1
 
+    n_empty_rows = A.count_tail_zero_rows()
+    n_non_empty_rows = A.height - n_empty_rows
 
-def print_free_vectors(A, computed_cols, free_cols):
-    """
-    Incrementing each free column changes the solution vector a bit.
-    Output that bit for each free column.
-    """
-    n_vars = A.width-1
-    base_vec = [0] * n_vars
-    apply_free_cols(A, computed_cols, free_cols, base_vec)
-
-    # print(f'finding free vectors for {free_cols!r}')
-
-    v = [0] * n_vars
+    base = A.column(-1)[:n_non_empty_rows]
     for c in free_cols:
-        v[c] = 1
-        apply_free_cols(A, computed_cols, free_cols, v)
-        diff = [fract_to_int(v[i] - base_vec[i]) for i in range(n_vars)]
-        # print(f'col {c}: {diff!r}')
-        v[c] = 0
+        base[c:c] = [0]
 
+    # print(f'base_vec={base!r}')
 
-def solve_non_recursive(original_matrix, A, goal_vector,
-                        soln_max_values, free_cols):
-
-    n_free = len(free_cols)
-    if n_free == 0:
-        return A.column(-1)[:A.width-1]
+    if len(base) != n:
+        print(f'bad base len, expected {n}, got {len(base)}')
+        A.print()
     
-    free_col_max_values = [soln_max_values[f] for f in free_cols]
-    computed_cols = [x for x in range(A.width-1) if x not in free_cols]
+    assert len(base) == n
 
-    # print(f'after reduction, free cols = {free_cols!r}, maxes {free_col_max_values!r}, computed cols = {computed_cols!r}')
-    # A.print()
+    free_vecs = []
+    for c in free_cols:
+        assert A.height <= A.width-1
+        v = [0] * n
 
-    best_soln = None
+        read_r = 0
+        for r in range(n):
+            if r in free_cols:
+                if r == c:
+                    v[r] = 1
+                else:
+                    v[r] = 0
+            else:
+                v[r] = -A[read_r][c]
+                read_r += 1
+        
+        free_vecs.append(v)
+
+        # print(f'free_vec[{c}] = {v!r}')
+
+    return base, free_vecs
+
+
+def add_scaled_vector(dest, src, v, factor = 1):
+    for i in range(len(dest)):
+        dest[i] = src[i] + v[i] * factor
+
+
+def trim_search_range(v, dv, lo, hi):
+    """
+    v: a base vector
+    dv: a difference vector
+    lo: minimum factor to check
+    hi: maximum factor to check
+
+    Figure out what range of k (bounded by [lo:hi]) yields
+    non-negative values for all entries in (v + k dv).
+
+    Also we want to find the solution with the minimum sum of entries
+    in (v + k dv), so this uses the sum of values in dv to determine
+    whether to search with increasing k or decreasing k, such that the
+    first solution found will be the best.
+
+    Result is a range object that defines the search range and direction.
+    """
+
+    verbose = False
+
+    for i in range(len(v)):
+        if v[i] >= 0:
+            if dv[i] < 0:
+                limit = floor(v[i] / -dv[i])
+                hi = min(limit, hi)
+                if verbose:
+                    print(f'column {i} stop at {limit}: {lo}..{hi}')
+        else:
+            if dv[i] <= 0:
+                if verbose:
+                    print(f'column {i} no-go x={v[i]} dx={dv[i]}')
+                hi = -1
+            else:
+                limit = ceil(v[i] / -dv[i])
+                lo = max(limit, lo)
+                if verbose:
+                    print(f'column {i} start at {limit}: {lo}..{hi}')
+
+        if lo > hi:
+            if verbose:
+                print('stop now')
+            return range(0, 0, 1)
+
+    assert lo <= hi
+    
+    if sum(dv) < 0:
+        if verbose:
+            print(f'test {hi} down to {lo}')
+        return range(hi, lo-1, -1)
+    else:
+        if verbose:
+            print(f'test {lo} up to {hi}')
+        return range(lo, hi+1, +1)
+
+
+def vec_add_mult_sum_ints(v, dv, k):
+    """
+    Checks if all entries in (v + k dv) are integers.
+    If so, return their sum.
+    Otherwise return None.
+    """
+    s = 0
+    for i in range(len(v)):
+        x = v[i] + k * dv[i]
+        # print(f'  v[{i}] = {x}')
+        if not is_integer(x):
+            return None
+        s += x
+
+    assert is_integer(s)
+    return fract_to_int(s)
+        
+
+def solve_free1(A, free_col, max_value, base_vec, free_vec):
+    """
+    Solve a system with one free variable.
+    A: row-reduced augmented matrix.
+    free_col: index of the free column
+    base_vec: null space base vector
+    free_vec: null space free vector. The null space is all vectors of the
+      form base_vec + k * free_vec
+
+    Depending on whether the sum of free_vec is positive or negative,
+    count up from 0 or down from max_value. Return the first solution that
+    is all non-negative and integers.
+    """
+
+    v = [0] * len(base_vec)
+    
+    search_range = trim_search_range(base_vec, free_vec, 0, max_value)
+    for k in search_range:
+        if vec_add_mult_sum_ints(base_vec, free_vec, k):
+            soln = [0] * len(base_vec)
+            add_scaled_vector(soln, base_vec, free_vec, k)
+            apply_fract_to_int(soln)
+            assert are_all_integers(soln) and are_all_non_negative(soln)
+            return soln
+        
+    return None
+
+
+def solve_free2_visual(A, free_cols, max_values,
+                       base_vec, free_vecs):
+    """
+    Draw a 2-d grid of solutions and non-solutions.
+    """
+    v = [0] * len(base_vec)
+    w = [0] * len(base_vec)
+
+    best_r = -1
+    best_c = -1
+    best_sum = math.inf
+    best_soln = [0]
+
+    grid = grid_create(max_values[0]+1, max_values[1]+1, True)
+    
+    for r in range(max_values[0]+1):
+        add_scaled_vector(w, base_vec, free_vecs[0], r)
+        for c in range(max_values[1]+1):
+            add_scaled_vector(v, w, free_vecs[1], c)
+            apply_fract_to_int(v)
+            
+            all_ints = are_all_integers(v)
+            all_pos = are_all_non_negative(v)
+
+            if all_ints:
+                if all_pos:
+                    grid[r][c] = '#'
+                    s = sum(v)
+                    if s < best_sum:
+                        best_r = r
+                        best_c = c
+                        best_sum = s
+                        best_soln = v[:]
+                else:
+                    grid[r][c] = '-'
+            else:
+                grid[r][c] = '/'
+
+    grid[best_r][best_c] = '@'
+    grid_print(grid)
+    
+    return best_soln
+
+
+def solve_free2(A, max_values, base_vec, free_vecs):
+
+    v = [0] * len(base_vec)
+    w = [0] * len(base_vec)
+
+    best_r = -1
+    best_c = -1
     best_sum = math.inf
 
-    v = [0] * (A.width-1)
-    first_free_idx = free_cols[0]
-    end = free_col_max_values[0] + 1
-
-    print_free_vectors(A, computed_cols, free_cols)
-
-    def inc(v):
-        i = len(free_cols)-1
-        while i >= 0:
-            vi = free_cols[i]
-            v[vi] += 1
-            if v[vi] <= free_col_max_values[i]:
-                return True
-            v[vi] = 0
-            i -= 1
-        return False
-
-    # iterate through all possible values of the free variables
-    while v[first_free_idx] < end:
-        apply_free_cols(A, computed_cols, free_cols, v)
-        # print(repr(v))
-        if are_all_integers(v) and are_all_non_negative(v):
-            s = sum(v)
-            # print(f'  is solution size {s}')
-            if s < best_sum:
-                # print(f'  best so far sum={s} {v!r}')
-                best_soln = v[:]
-                best_sum = s
-
-        if not inc(v):
-            break
-
-    return best_soln
-    
-    """
-    v = [0] * (A.width-1)
-    for i, c in enumerate(free_cols):
-        v[c] = free_values[i]
-
-    print(f'before apply v={v!r}')
-    apply_free_cols(A, computed_cols, free_cols, v)
-    print(f'after apply v={v!r}')
-
+    for r in range(max_values[0]+1):
+        add_scaled_vector(w, base_vec, free_vecs[0], r)
+        search_range = trim_search_range(w, free_vecs[1], 0, max_values[1])
+        
+        for c in search_range:
+            s = vec_add_mult_sum_ints(w, free_vecs[1], c)
+            if s is not None:
+                if s < best_sum:
+                    best_r = r
+                    best_c = c
+                    best_sum = s
+                break
+                
+    assert best_r > -1 and best_c > -1
+    add_scaled_vector(v, base_vec, free_vecs[0], best_r)
+    add_scaled_vector(v, v, free_vecs[1], best_c)
+    apply_fract_to_int(v)
+        
     return v
-    """
+
+
+def solve_free3(problem_idx, A, max_values, base_vec, free_vecs):
+    # print(f'problem {problem_idx}, {max_values=}')
+
+    assert len(free_vecs) == 3 and len(max_values) == 3
+    v0 = [0] * len(base_vec)
+    v1 = [0] * len(base_vec)
+    v2 = [0] * len(base_vec)
+
+    best_coord = None
+    best_sum = math.inf
+
+    for k0 in range(max_values[0]+1):
+        add_scaled_vector(v0, base_vec, free_vecs[0], k0)
+        for k1 in range(max_values[1]+1):
+            add_scaled_vector(v1, v0, free_vecs[1], k1)
+            
+            search_range = trim_search_range(v1, free_vecs[2], 0, max_values[2])
+
+            for k2 in search_range:
+                s = vec_add_mult_sum_ints(v1, free_vecs[2], k2)
+                if s:
+                    if s < best_sum:
+                        best_coord = k0, k1, k2
+                        best_sum = s
+                    break
+                
+    assert best_coord
+    k0, k1, k2 = best_coord
+    add_scaled_vector(v0, base_vec, free_vecs[0], k0)
+    add_scaled_vector(v0, v0, free_vecs[1], k1)
+    add_scaled_vector(v0, v0, free_vecs[2], k2)
+    apply_fract_to_int(v0)
+        
+    return v0
     
 
-def solve(original_matrix, b, problem_idx, known_soln):
-    # original_matrix.print()
-    # print()
+def solve(original_matrix, b, problem_idx, known_soln, total_elapsed_ns):
+
+    timer_ns = time.perf_counter_ns()
     
     assert len(b) == original_matrix.height
 
+    n_vars = original_matrix.width
     soln_max_values = max_values(original_matrix, b)
-    # print(f'max value for each entry: {soln_max_values!r}')
+    assert n_vars == len(soln_max_values)
 
     # augment the matrix with the goal values
-    augmented = original_matrix.copy()
-    augmented.append_col(b)
+    A = original_matrix.copy()
+    A.append_col(b)
+    A.row_reduce()
 
-    augmented.row_reduce()
-    free_cols = find_free_var_columns(augmented)
-    n_free = len(free_cols)
-    # print(f'{n_free=}')
+    # remove empty rows at the bottom
+    n_zero_rows = A.count_tail_zero_rows()
+    A.remove_rows(A.height - n_zero_rows, n_zero_rows)
     
-    timer_ns = time.perf_counter_ns()
-    soln = solve_non_recursive(original_matrix, augmented, b, soln_max_values,
-                               free_cols)
+    free_cols = find_free_var_columns(A)
+    n_free = len(free_cols)
+    
+    base_vec, free_vecs = compute_solution_vectors(A, free_cols)
+        
+    assert len(free_vecs) == n_free
+
+    free_maxes = [soln_max_values[free_cols[i]] for i in range(n_free)]
+    
+    if n_free == 0:
+        soln = A.column(-1)[:n_vars]
+    elif n_free == 1:
+        soln = solve_free1(A, free_cols[0], free_maxes[0],
+                           base_vec, free_vecs[0])
+    elif n_free == 2:
+        soln = solve_free2(A, free_maxes, base_vec, free_vecs)
+    else:
+        soln = solve_free3(problem_idx, A, free_maxes, base_vec, free_vecs)
+                                   
     timer_ns = time.perf_counter_ns() - timer_ns
     print(f'{problem_idx}\t{timer_ns / 1e9:.6f}s\t{n_free}\t{soln!r}')
+    total_elapsed_ns[0] += timer_ns
 
     soln_size = sum(soln)
     
@@ -457,61 +439,14 @@ def solve(original_matrix, b, problem_idx, known_soln):
         print(f'  ERROR  known soln = {sum(known_soln)}, I found {soln_size}')
 
 
-def reorder_columns(original, b):
-    soln_max_values = max_values(original, b)
-    
-    mapping = [(soln_max_values[i], i) for i in range(original.width)]
-    print(repr(mapping))
-    mapping.sort(reverse=True)
-    print(repr(mapping))
-
-    # make a new matrix where column c was column column_order[c] in original
-    column_order = [tup[1] for tup in mapping]
-    new_b = [tup[0] for tup in mapping]
-
-    A = Matrix(height = original.height, width = original.width)
-    print(f'size {A.height} x {A.width}')
-    for r in range(A.height):
-        for c in range(A.width):
-            A[r][c] = original[r][column_order[c]]
-    print('with reordered columns')
-    A.print()
-    print('\nreduce')
-    A.row_reduce()
-    A.print()
-    
-
-
 def find_solutions(problem_list):
-    skip_list = frozenset([23, 70, 87, 105, 108, 133, 137, 138])
-    # for i, (A, b, x) in enumerate(problem_list[6:7]):
-    # for i, (A, b, x) in enumerate(problem_list[23:24]):
+    total_elapsed_ns = [0]
     for i, (A, b, x) in enumerate(problem_list):
-        if i in skip_list: continue
         matrix = Matrix(A)
-        # print(f'problem {i}')
-        # print(f'known solution {x!r} (size={sum(x)})')
-        solve(matrix, b, i, x)
-        
+        solve(matrix, b, i, x, total_elapsed_ns)
 
-        # reorder_columns(matrix, b)
+    print(f'total solve time: {total_elapsed_ns[0] / 1e9:.6f} sec')
 
 
-def fraction_str(f):
-    return f'({f.numerator}/{f.denominator})'
-
-
-Fraction.__str__ = fraction_str
-
-# test_solutions(problem_list)
-
-find_solutions(problem_list)
-
-# matrix = [
-#     [5, -1, 2, 34],
-#     [0, 4, -3, 12],
-#     [10, -2, 1, -4],
-#     ]
-# matrix_row_reduce(matrix)
-
-          
+if __name__ == '__main__':
+    find_solutions(problem_list)
