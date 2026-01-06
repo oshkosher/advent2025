@@ -10,8 +10,11 @@ Ed Karrels, ed.karrels@gmail.com, December 2025
 
 # common standard libraries
 import sys, os, re, itertools, math, collections, itertools
-import numpy as np
+# import numpy as np
 from math import floor, ceil
+
+import threading
+from queue import Queue
 
 # linear programming library
 # import pulp
@@ -561,6 +564,74 @@ def part2(machines):
     print(total_presses)
 
 
+class ComputeThread(threading.Thread):
+    def __init__(self, thread_id, todo_q, results_q):
+        threading.Thread.__init__(self)
+        self.thread_id = thread_id
+        self.todo_q = todo_q
+        self.results_q = results_q
+
+    def run(self):
+        getting_ns = 0
+        putting_ns = 0
+        jolting_ns = 0
+        tasks_done = 0
+        while (True):
+            timer = time.perf_counter_ns()
+            machine = self.todo_q.get()
+            if tasks_done > 0:
+                getting_ns += time.perf_counter_ns() - timer
+            
+            # all done
+            if machine == 0:
+                # put it back on the queue so other workers will see it
+                self.todo_q.put(0)
+                break
+
+            timer = time.perf_counter_ns()
+            press_count = joltage_presses(machine)
+            jolting_ns += time.perf_counter_ns() - timer
+            
+            tasks_done += 1
+            timer = time.perf_counter_ns()
+            self.results_q.put(press_count)
+            putting_ns += time.perf_counter_ns() - timer
+
+        getting_ms = f'{getting_ns / 1e6:.3f}'
+        putting_ms = f'{putting_ns / 1e6:.3f}'
+        jolting_ms = f'{jolting_ns / 1e6:.0f}'
+        print(f'thread {self.thread_id}: {tasks_done} tasks, {jolting_ms}ms computing, {getting_ms}ms getting, {putting_ms}ms putting')
+    
+
+def part2_threaded(machines, n_compute_threads = 4):
+    todo_q = Queue()
+    results_q = Queue()
+
+    compute_threads = []
+    for i in range(n_compute_threads):
+        t = ComputeThread(i, todo_q, results_q)
+        t.start()
+        compute_threads.append(t)
+
+    nanos = time.perf_counter_ns()
+    for machine in machines:
+        todo_q.put(machine)
+    todo_q.put(0)
+    print(f'controller says q size is {todo_q.qsize()}')
+
+    total_presses = 0
+    for i in range(len(machines)):
+        total_presses += results_q.get()
+        # print(f'got {i}')
+    nanos = time.perf_counter_ns() - nanos
+
+    print(f'{total_presses} in {nanos / 1e6:.3f} ms')
+
+    for t in compute_threads:
+        t.join()
+    print('flock gathered')
+
+
 if __name__ == '__main__':
     # read input as a list of strings
     input = read_problem_input()
@@ -569,7 +640,8 @@ if __name__ == '__main__':
     t0 = time.perf_counter_ns()
     part1(machines)
     t1 = time.perf_counter_ns()
-    part2(machines)
+    # part2(machines)
+    part2_threaded(machines, 2)
     t2 = time.perf_counter_ns()
-    # print(f'part1 {(t1-t0)/1e6:.2f} millis')
-    # print(f'part2 {(t2-t1)/1e6:.2f} millis')
+    print(f'part1 {(t1-t0)/1e6:.2f} millis')
+    print(f'part2 {(t2-t1)/1e6:.2f} millis')
