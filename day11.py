@@ -10,6 +10,7 @@ Ed Karrels, ed.karrels@gmail.com, December 2025
 
 # common standard libraries
 import sys, os, re, itertools, math, collections, itertools
+from collections import deque
 
 # change to the directory of the script so relative references work
 from pathlib import Path
@@ -32,11 +33,23 @@ class Node:
         # to this node from some starting point
         self.n_paths = 0
 
+        # my index in the topological order
+        self.topo_order = -1
+
     def __repr__(self):
         outs = ' '.join([o.name for o in self.outs])
         ins = ' '.join([o.name for o in self.ins])
         return f'Node({self.name} outs=({outs}) ins=({ins}))'
 
+    def has_missing_inputs(self):
+        """
+        Returns True iff any of my input nodes do not have .topo_order set.
+        """
+        for parent in self.ins:
+            if parent.topo_order == -1:
+                return True
+        return False
+    
 
 def parse_input(input):
     # name: Node
@@ -62,6 +75,43 @@ def parse_input(input):
             dest.ins.append(src)
             
     return node_map
+
+
+def topo_sort(node_map):
+    """
+    Returns a list of the nodes in topological order such that all a node's
+    incoming nodes are earlier in the list.
+    Also sets 'topo_order' field on each node object such that
+      topo_order[i].topo_order == i
+    """
+    q = deque()
+    topo_order = []
+
+    # first enqueue every node with no inputs (should be just 'svr')
+    for node in node_map.values():
+        if len(node.ins) == 0:
+            q.append(node)
+
+    while q:
+        node = q.popleft()
+        node.topo_order = len(topo_order)
+        topo_order.append(node)
+        for child in node.outs:
+            if not child.has_missing_inputs():
+                q.append(child)
+    """
+    def name_and_order(node):
+        return f'{node.name}({node.topo_order})'
+                
+    for i, node in enumerate(topo_order):
+        parent_list = ' '.join([name_and_order(p) for p in node.ins])
+        for parent in node.ins:
+            assert (parent.topo_order != -1
+                    and parent.topo_order < node.topo_order)
+        print(f'{i}. {name_and_order(node)}: {parent_list}')
+    """
+
+    return topo_order
 
 
 def output_graphviz(node_map):
@@ -95,121 +145,35 @@ def part1(node_map):
     print(count_routes_dfs(node_map['you'], node_map['out']))
 
 
-def find_descendent_subset(src):
-    """
-    Returns a set of all the nodes reachable when starting at src
-    by doing a breadth-first traverse of 'outs' lists.
-    """
-    visited = set()
+def count_paths_dp(topo_order, src, dest):
+    # reset path counters
+    for node in topo_order:
+        node.n_paths = 0
 
-    visit_q = collections.deque()
-    visit_q.append(src)
-    while len(visit_q):
-        node = visit_q.popleft()
-        if node in visited:
-            continue
-        visited.add(node)
+    src.n_paths = 1
 
-        for child in node.outs:
-            visit_q.append(child)
+    for node in topo_order[src.topo_order+1 : dest.topo_order+1]:
+        for parent in node.ins:
+            node.n_paths += parent.n_paths
 
-    return visited
+    return dest.n_paths
 
 
-def find_ancestor_subset(dest):
-    """
-    Returns a set of all the nodes that can reach dest
-    by doing a breadth-first traverse of 'ins' lists.    
-    """
-    visited = set()
-
-    visit_q = collections.deque()
-    visit_q.append(dest)
-    while len(visit_q):
-        node = visit_q.popleft()
-        if node in visited:
-            continue
-        visited.add(node)
-
-        for child in node.ins:
-            visit_q.append(child)
-
-    return visited
-
-
-def create_subgraph(node_map, selected_set):
-    """
-    Returns a name->node map of just the nodes in the graph included
-    in selected_set. This also remove entries from each node's 'ins' and
-    'outs' lists that are not in selected_set.
-    """
-    sub_node_map = {
-        n.name: Node(n.name) for n in node_map.values() if n in selected_set
-    }
-
-    # convert a node from node_map into a node in sub_node_map
-    def to_sub(orig):
-        return sub_node_map[orig.name]
-
-    for node in sub_node_map.values():
-        orig = node_map[node.name]
-        node.outs = [to_sub(x) for x in orig.outs if x in selected_set]
-        node.ins = [to_sub(x) for x in orig.ins if x in selected_set]
-
-    return sub_node_map
-
-
-def count_paths_dp(src, dest):
-    path_map = {}
-    # path_map = {src: 1}
-    
-    q = collections.deque()
-    q.append(src)
-
-    def is_all_incoming_computed(node):
-        for incoming in node.ins:
-            if incoming not in path_map:
-                return False
-        return True
-
-    while len(q):
-        node = q.popleft()
-        
-        if node == src:
-            path_count = 1
-        else:
-            path_count = sum([path_map[incoming] for incoming in node.ins])
-        path_map[node] = path_count
-        # print(f'{path_count} paths to {node.name}')
-
-        for out in node.outs:
-            if is_all_incoming_computed(out):
-                q.append(out)
-                    
-    return path_map[dest]
-    
-
-def part2(node_map):
-    fft_in_set = find_ancestor_subset(node_map['fft'])
-    fft_out_set = find_descendent_subset(node_map['fft'])
-    dac_in_set = find_ancestor_subset(node_map['dac'])
-    dac_out_set = find_descendent_subset(node_map['dac'])
-
+def part2(node_map, topo_order):
     # count all the paths from svr to fft
-    subgraph_fft_in = create_subgraph(node_map, fft_in_set)
-    paths_to_fft = count_paths_dp(subgraph_fft_in['svr'],
-                                  subgraph_fft_in['fft'])
+    paths_to_fft = count_paths_dp(
+        topo_order, node_map['svr'], node_map['fft'])
 
     # count all the paths from fft to dac
-    subgraph_fft_to_dac = create_subgraph(node_map, fft_out_set & dac_in_set)
-    paths_fft_to_dac = count_paths_dp(subgraph_fft_to_dac['fft'],
-                                      subgraph_fft_to_dac['dac'])
-
+    paths_fft_to_dac = count_paths_dp(
+        topo_order, node_map['fft'], node_map['dac'])
+        
     # count all the paths from dac to out
-    subgraph_dac_out = create_subgraph(node_map, dac_out_set)
-    paths_dac_out = count_paths_dp(subgraph_dac_out['dac'],
-                                   subgraph_dac_out['out'])
+    paths_dac_out = count_paths_dp(
+        topo_order, node_map['dac'], node_map['out'])
 
+    # print(f'{paths_to_fft} x {paths_fft_to_dac} x {paths_dac_out}')
+    
     # total possible = product of all three
     print(paths_to_fft * paths_fft_to_dac * paths_dac_out)
 
@@ -218,8 +182,9 @@ if __name__ == '__main__':
     # read input as a list of strings
     input = read_problem_input()
     node_map = parse_input(input)
-
+    topo_order = topo_sort(node_map)
+    
     # output_graphviz(node_map)
     
     part1(node_map)
-    part2(node_map)
+    part2(node_map, topo_order)
