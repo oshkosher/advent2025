@@ -5,6 +5,9 @@ Advent of Code 2025, Day 10: Factory
 
 Integer programming with boolean matrices
 
+Use UV to run with threaded interpreter:
+  uv run -p 3.14t python day10.py
+
 Ed Karrels, ed.karrels@gmail.com, December 2025
 """
 
@@ -617,7 +620,6 @@ def part2_threaded(machines, n_compute_threads = 4):
     for machine in machines:
         todo_q.put(machine)
     todo_q.put(0)
-    print(f'controller says q size is {todo_q.qsize()}')
 
     total_presses = 0
     for i in range(len(machines)):
@@ -629,10 +631,21 @@ def part2_threaded(machines, n_compute_threads = 4):
 
     for t in compute_threads:
         t.join()
-    print('flock gathered')
 
 
 if __name__ == '__main__':
+    thread_count = 4
+    
+    if sys.argv[1] == '-t' and len(sys.argv) >= 3:
+        try:
+            thread_count = int(sys.argv[2])
+            if thread_count < 1:
+                raise ValueError()
+        except ValueError:
+            print(f'Invalid thread count: {sys.argv[2]}')
+            sys.exit(1)
+        del sys.argv[1:3]
+
     # read input as a list of strings
     input = read_problem_input()
     machines = [Machine.parse(line) for line in input]
@@ -640,8 +653,8 @@ if __name__ == '__main__':
     t0 = time.perf_counter_ns()
     part1(machines)
     t1 = time.perf_counter_ns()
-    # part2(machines)
-    part2_threaded(machines, 2)
+    part2(machines)
+    # part2_threaded(machines, thread_count)
     t2 = time.perf_counter_ns()
     print(f'part1 {(t1-t0)/1e6:.2f} millis')
     print(f'part2 {(t2-t1)/1e6:.2f} millis')
