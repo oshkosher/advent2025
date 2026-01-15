@@ -11,6 +11,7 @@ Ed Karrels, ed.karrels@gmail.com, December 2025
 
 """
 uv run -p 3.14 python ./day10.py
+uv run --with viztracer -p 3.14t python -m viztracer --log_sparse -o parallel_machines_without_gil.json day10.py
 
 total time spent solving problems. nf = number of free variables
 time is in microseconds
@@ -46,6 +47,8 @@ from math import floor, ceil
 import threading
 from queue import Queue
 
+from viztracer import log_sparse, get_tracer
+
 # linear programming library
 # import pulp
 
@@ -71,6 +74,37 @@ class Machine:
         self.button_bits = button_bits
         
         self.jolts = jolts
+
+        # lock, search_size, search_done, and best_soln will be set if
+        # multiple thread are used to solve the machine
+        self.lock = None
+        
+        # The problem is parallelized by splitting the search space into
+        # multiple ranges. For example, if the first free variable is
+        # in the range [0..30], the chunks [0..10], [11..30] could be
+        # assigned to two different threads. The total size (not the number
+        # of chunks) will be stored in search_size. In this case, 31.
+        #
+        # This value is set before the problem is assigned to threads,
+        # and does not change.
+        self.search_size = None
+
+        self.search_chunk_size = None
+
+        # this tracks how much of the search space has been processed.
+        # For example, if the search space is [0..30] and the chunks
+        # are [0..10], [11..30], when [0..10] is completed search_done
+        # will be incrased by 11, and when [11..30] is completed
+        # search_done will be incrased by 20.
+        #
+        # This value is protected by self.lock
+        self.search_done = None
+
+        # After a thread processes a chunk, if it found a solution better
+        # than best_soln, it will update best_soln.
+        #
+        # This value is protected by self.lock
+        self.best_soln = None
 
     def __repr__(self):
         return f'Machine({self.idx}, {len(self.jolts)}x{len(self.buttons)})'
@@ -110,6 +144,67 @@ class Machine:
 
         return Machine(idx, lights, button_ints, button_bits, jolts)
 
+
+    def init_threaded_soln(self, free_maxes, n_threads):
+        self.lock = threading.Lock()
+        self.search_size = free_maxes[0]
+
+        """
+        How big should the work chunks be? Larger is more efficient, smaller
+        provides for better load balancing. Let's start with a cap
+        of n_threads * 3, so on average each thread will do 3 pieces of
+        work.
+        """
+        thread_factor = 3
+        chunk_count = n_threads * thread_factor
+
+        if self.search_size <= chunk_count:
+            self.search_chunk_size = 1
+        else:
+            # round up, so when chunk_count doesn't evenly divide search_size,
+            # most of the chunks are large and the last one is small.
+            # For example, with search_size = 10 and chunk_count=4,
+            # this will yield a chunk size of (10+3)//4 = 3 and chunks
+            # of size [3, 3, 3, 1].
+            # If we rounded down the chunk size would be 10//4 = 2 and we'd get
+            # chunks of size [2, 2, 2, 2, 2], exceeding chunk_count.
+            self.search_chunk_size = ((self.search_size + chunk_count - 1)
+                                      // chunk_count)
+        
+        self.search_done = 0
+        self.best_soln = math.inf
+    
+    
+
+class VizEventNameOnly:
+    def __init__(
+            self, tracer: "VizTracer", event_name: str
+    ) -> None:
+        self._tracer = tracer
+        self._name = event_name
+        self._start = 0
+
+    def __enter__(self) -> None:
+        if not self._tracer: return
+        self._start = self._tracer.getts()
+
+    def __exit__(self, type, value, trace) -> None:
+        if not self._tracer: return
+        
+        dur = self._tracer.getts() - self._start
+        raw_data = {
+            "ph": "X",
+            "ts": self._start,
+            "name": self._name,
+            "dur": dur,
+            "cat": "FEE",
+        }
+        self._tracer.add_raw(raw_data)
+
+
+def log_event_name_only(event_name: str) -> VizEventNameOnly:
+    return VizEventNameOnly(get_tracer(), event_name)
+    
 
 def light_button_count_bfs(machine):
     # each tuple on the queue:
@@ -582,6 +677,8 @@ def joltage_presses_init(machine):
     """
     Start the computation, to the point where the number of free variables
     is computed.
+
+    returns A, free_cols, free_maxes
     """
     # create a matrix representing what lights up when each
     # button is pressed
@@ -612,7 +709,7 @@ def joltage_presses_init(machine):
     free_maxes = [soln_max_values[free_cols[i]]
                   for i in range(len(free_cols))]
         
-    return (A, free_cols, free_maxes)
+    return A, free_cols, free_maxes
 
 
 def joltage_presses_finish(machine, A, free_cols, free_maxes):
@@ -644,7 +741,8 @@ def joltage_presses_finish(machine, A, free_cols, free_maxes):
 def part2(machines):
     total_presses = 0
     for i, machine in enumerate(machines):
-        total_presses += joltage_presses(machine)
+        with log_event_name_only(f'#{i}'):
+            total_presses += joltage_presses(machine)
     print(total_presses)
 
 
@@ -659,6 +757,7 @@ class ComputeThread(threading.Thread):
         self.results_table = []
 
     def run(self):
+        # self.name = f'Thread {self.thread_id}'
         getting_ns = 0
         putting_ns = 0
         jolting_ns = 0
@@ -678,7 +777,10 @@ class ComputeThread(threading.Thread):
                 break
 
             nanos = time.perf_counter_ns()
-            press_count = joltage_presses(machine, n_free_vars)
+
+            with log_event_name_only(f'#{machine.idx}'):
+                press_count = joltage_presses(machine, n_free_vars)
+            
             nanos = time.perf_counter_ns() - nanos
             jolting_ns += nanos
             
@@ -768,32 +870,36 @@ def part2_threaded(machines, n_compute_threads = 4):
     todo_q = Queue()
     results_q = Queue()
     result_table = []
-
+    
     # 1300-1800 usec
-    t1 = time.perf_counter_ns()
-    compute_threads = []
-    for i in range(n_compute_threads):
-        # t = ComputeThread(i, todo_q, results_q)
-        t = ComputeThreadMultipleReps(i, todo_q, results_q, 10)
-        t.start()
-        compute_threads.append(t)
-    t2 = time.perf_counter_ns()
+    with log_event_name_only('start threads'):
+        t1 = time.perf_counter_ns()
+        compute_threads = []
+        for i in range(n_compute_threads):
+            t = ComputeThread(i, todo_q, results_q)
+            t.name = f'Thread {i}'
+            # t = ComputeThreadMultipleReps(i, todo_q, results_q, 10)
+            t.start()
+            compute_threads.append(t)
+        t2 = time.perf_counter_ns()
 
     # 300-400 usec
-    nanos = time.perf_counter_ns()
-    for machine in machines:
-        todo_q.put(machine)
-    todo_q.put(0)
-    t3 = time.perf_counter_ns()
+    with log_event_name_only('enqueue jobs'):
+        nanos = time.perf_counter_ns()
+        for machine in machines:
+            todo_q.put(machine)
+        todo_q.put(0)
+        t3 = time.perf_counter_ns()
 
     # 750000 - 850000 usec
-    total_presses = 0
-    for i in range(len(machines)):
-        result = results_q.get()
-        total_presses += result[-1]
-        result_table.append(result)
-    nanos = time.perf_counter_ns() - nanos
-    t4 = time.perf_counter_ns()
+    with log_event_name_only('wait for results'):
+        total_presses = 0
+        for i in range(len(machines)):
+            result = results_q.get()
+            total_presses += result[-1]
+            result_table.append(result)
+        nanos = time.perf_counter_ns() - nanos
+        t4 = time.perf_counter_ns()
 
     print(f'{total_presses} in {nanos / 1e6:.3f} ms')
 
@@ -809,10 +915,14 @@ def part2_threaded(machines, n_compute_threads = 4):
     print(f'{(t4-t3) / 1e3} us: gather results')
     print(f'{(t5-t4) / 1e3} us: join')
 
+    """
     result_table.sort()
     print('\t'.join(['idx', 'usec', 'n_free', 'mx_size', 'n_press']))
     for idx, usec, n_free, mx_size, n_press in result_table:
         print(f'{idx}\t{usec}\t{n_free}\t{mx_size}\t{n_press}')
+    """
+    total_press = sum([row[4] for row in result_table])
+    print(total_press)
     
 
 def part2_time_each_problem(machines, iter_count = 10):
@@ -1004,13 +1114,47 @@ def part2_single_problem(machine, n_reps):
 
 
 def part2_threaded_large_ones(machines, n_threads):
+    total_sum = 0
     large_machine_q = Queue()
+    completed_machine_q = Queue()
 
-    machines.sort(key = lambda m: -len(m.buttons))
-
-    for machine in machines:
-        pass
+    compute_threads = []
+    for i in range(n_compute_threads):
+        t = ComputeThreadPartialMachines(i, large_machine_q,
+                                         completed_machine_q)
+        t.name = f'Thread {i}'
+        t.start()
+        compute_threads.append(t)
     
+
+    # see if this speeds things up; it moves the largest problems to the
+    # front of the list so they get quickly farmed out to the compute threads
+    # machines.sort(key = lambda m: -len(m.buttons))
+
+    n_offloaded = 0
+    for machine in machines:
+        A, free_cols, free_maxes = joltage_presses_init(machine)
+
+        # put anything with 3 free columns on the large_machine_q
+        if len(free_cols) > 2:
+            machine.init_threaded_soln(free_maxes, n_threads)
+            large_machine_q.put((machine, A, free_cols, free_maxes))
+            n_offloaded += 1
+        else:
+            press_count = joltage_presses_finish(machine, A, free_cols,
+                                                 free_maxes)
+            total_sum += press_count
+
+    while n_offloaded > 0:
+        completed_machine = complete_machine_q.get()
+        n_offloaded -= 1
+        total_sum += completed_machine.best_soln
+
+    for t in compute_threads:
+        t.join()
+
+    print(total_sum)
+        
 
 def main(args):
     filename = None
@@ -1048,9 +1192,9 @@ def main(args):
     t1 = time.perf_counter_ns()
     # part2(machines)
     # part2_threaded(machines, 4)
-    part2_time_each_problem(machines, 10)
+    # part2_time_each_problem(machines, 10)
     # part2_single_problem(machines[23], 50)
-    # part2_threaded_large_ones(machines, n_threads)
+    part2_threaded_large_ones(machines, n_threads)
     t2 = time.perf_counter_ns()
     # print(f'part1 {(t1-t0)/1e6:.2f} millis')
     print(f'part2 {(t2-t1)/1e6:.2f} millis')
