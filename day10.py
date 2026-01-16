@@ -10,7 +10,7 @@ Ed Karrels, ed.karrels@gmail.com, December 2025
 """
 
 """
-uv run -p 3.14 python ./day10.py
+uv run -p 3.14t python ./day10.py
 uv run --with viztracer -p 3.14t python -m viztracer --log_sparse -o parallel_machines_without_gil.json day10.py
 
 total time spent solving problems. nf = number of free variables
@@ -78,6 +78,10 @@ class Machine:
         # lock, search_size, search_done, and best_soln will be set if
         # multiple thread are used to solve the machine
         self.lock = None
+
+        # will be set in parallel solver
+        self.base_vec = None
+        self.free_vecs = None
         
         # The problem is parallelized by splitting the search space into
         # multiple ranges. For example, if the first free variable is
@@ -147,7 +151,7 @@ class Machine:
 
     def init_threaded_soln(self, free_maxes, n_threads):
         self.lock = threading.Lock()
-        self.search_size = free_maxes[0]
+        self.search_size = free_maxes[0] + 1
 
         """
         How big should the work chunks be? Larger is more efficient, smaller
@@ -173,6 +177,18 @@ class Machine:
         
         self.search_done = 0
         self.best_soln = math.inf
+
+    def search_chunk_done(self, chunk_size, best_soln):
+        """
+        Returns true if the search is complete.
+        """
+        with self.lock:
+            self.search_done += chunk_size
+            # print(f'machine {self.idx} {self.search_done}/{self.search_size} done')
+            if best_soln < self.best_soln:
+                self.best_soln = best_soln
+            is_done = self.search_done == self.search_size
+        return is_done
     
     
 
@@ -1113,19 +1129,110 @@ def part2_single_problem(machine, n_reps):
     timers.report()
 
 
+def solve_free3_partial(max_values, base_vec, free_vecs,
+                        axis0_range):
+    """
+    Solve a system with three free variables.
+    The input doesn't contain anything larger than three.
+    Only check the axis0_range values for the first free variable.
+    """
+    assert len(free_vecs) == 3 and len(max_values) == 3
+    v0 = [0] * len(base_vec)
+    v1 = [0] * len(base_vec)
+
+    best_sum = math.inf
+
+    # for k0 in range(max_values[0]+1):
+
+    for k0 in axis0_range:
+        add_scaled_vector(v0, base_vec, free_vecs[0], k0)
+        for k1 in range(max_values[1]+1):
+            add_scaled_vector(v1, v0, free_vecs[1], k1)
+            
+            search_range = trim_search_range(v1, free_vecs[2], 0, max_values[2])
+
+            for k2 in search_range:
+                s = vec_add_mult_sum_ints(v1, free_vecs[2], k2)
+                if s:
+                    if s < best_sum:
+                        best_sum = s
+                    break
+        
+    return best_sum
+
+
+class ComputeThreadPartialMachines(threading.Thread):
+    def __init__(self, thread_id, todo_q, results_q):
+        threading.Thread.__init__(self)
+        self.name = f'Thread {thread_id}'
+        self.thread_id = thread_id
+        self.todo_q = todo_q
+        self.results_q = results_q
+
+        # [(idx, usec, n_free, mx_size, n_press), ...]
+        self.results_table = []
+
+    def run(self):
+        # self.name = f'Thread {self.thread_id}'
+    
+        while (True):
+            task = self.todo_q.get()
+            
+            # all done
+            if task == 0:
+                # put it back on the queue so other workers will see it
+                self.todo_q.put(0)
+                break
+
+            machine, matrix, free_cols, free_maxes, rng = task
+            
+            with log_event_name_only(f'#{machine.idx}@{rng.start}-{rng.stop}'):
+                press_count = solve_free3_partial(free_maxes, machine.base_vec,
+                                                  machine.free_vecs, rng)
+            
+            
+            # print(f'[{self.thread_id}] machine {machine.idx} {rng} '
+            #       f'best={press_count}')
+
+            # matrix_size = f'{len(machine.jolts)}x{len(machine.buttons)}'
+
+            if machine.search_chunk_done(len(rng), press_count):
+                # print(f'[{self.thread_id}] machine {machine.idx} done')
+                self.results_q.put(machine)
+
+
+def enqueue_large_machine(large_machine_q, machine, n_threads, matrix,
+                          free_cols, free_maxes):
+    """
+    Initialize a Machine object to be computed in parallel, and create
+    multiple tasks on the job queue to compute it.
+    """
+    machine.init_threaded_soln(free_maxes, n_threads)
+
+    machine.base_vec, machine.free_vecs = \
+        compute_solution_vectors(matrix, free_cols)
+
+    end = free_maxes[0]
+    for range_start in range(0, end+1, machine.search_chunk_size):
+        range_end = min(end+1, range_start + machine.search_chunk_size)
+        rng = range(range_start, range_end)
+        task = (machine, matrix, free_cols, free_maxes, rng)
+        large_machine_q.put(task)
+        # print(f'enqueue machine {machine.idx} space={free_maxes!r} '
+        #       f'range={rng!r}')
+    
+
 def part2_threaded_large_ones(machines, n_threads):
     total_sum = 0
     large_machine_q = Queue()
     completed_machine_q = Queue()
 
     compute_threads = []
-    for i in range(n_compute_threads):
+    for i in range(n_threads):
         t = ComputeThreadPartialMachines(i, large_machine_q,
                                          completed_machine_q)
-        t.name = f'Thread {i}'
         t.start()
         compute_threads.append(t)
-    
 
     # see if this speeds things up; it moves the largest problems to the
     # front of the list so they get quickly farmed out to the compute threads
@@ -1133,22 +1240,33 @@ def part2_threaded_large_ones(machines, n_threads):
 
     n_offloaded = 0
     for machine in machines:
-        A, free_cols, free_maxes = joltage_presses_init(machine)
+        matrix, free_cols, free_maxes = joltage_presses_init(machine)
 
-        # put anything with 3 free columns on the large_machine_q
+        # put anything with more than two free columns on the large_machine_q
         if len(free_cols) > 2:
-            machine.init_threaded_soln(free_maxes, n_threads)
-            large_machine_q.put((machine, A, free_cols, free_maxes))
+            enqueue_large_machine(large_machine_q, machine, n_threads, matrix,
+                                  free_cols, free_maxes)
             n_offloaded += 1
         else:
-            press_count = joltage_presses_finish(machine, A, free_cols,
-                                                 free_maxes)
+            # compute directly
+            with log_event_name_only(f'#{machine.idx}'):
+                press_count = joltage_presses_finish(machine, matrix, free_cols,
+                                                     free_maxes)
+            # print(f'machine {machine.idx}: {press_count}')
             total_sum += press_count
 
-    while n_offloaded > 0:
-        completed_machine = complete_machine_q.get()
-        n_offloaded -= 1
-        total_sum += completed_machine.best_soln
+    # enque termination marker
+    large_machine_q.put(0)
+
+    # print(f'waiting for {n_offloaded} large machines')
+    
+    with log_event_name_only(f'waiting for {n_offloaded} large machines'):
+        while n_offloaded > 0:
+            completed_machine = completed_machine_q.get()
+            n_offloaded -= 1
+            total_sum += completed_machine.best_soln
+            # print(f'machine {completed_machine.idx} done, '
+            #       f'soln = {completed_machine.best_soln}')
 
     for t in compute_threads:
         t.join()
@@ -1158,7 +1276,7 @@ def part2_threaded_large_ones(machines, n_threads):
 
 def main(args):
     filename = None
-    n_threads = 4
+    n_threads = 3
 
     while len(args) > 0 and args[0][0] == '-':
         if args[0] == '-t':
