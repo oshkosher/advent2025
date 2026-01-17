@@ -1275,7 +1275,7 @@ def part2_threaded_large_ones(machines, n_threads):
         
 
 def main(args):
-    filename = None
+    filename = 'day10.in'
     n_threads = 3
 
     while len(args) > 0 and args[0][0] == '-':
@@ -1285,6 +1285,7 @@ def main(args):
                 return 1
             try:
                 n_threads = int(args[1])
+                print(f'using {n_threads} compute threads')
             except ValueError:
                 print(f'Invalid thread count: {args[1]}')
                 return 1
