@@ -372,6 +372,33 @@ def find_free_var_columns(matrix):
     return list(without_pivot)
 
 
+def array_swap(a, i1, i2):
+    tmp = a[i1]
+    a[i1] = a[i2]
+    a[i2] = tmp
+
+
+def largest_axis_last(free_maxes, free_vecs):
+    """
+    Rearrange the columns so the column with the largest free_max value
+    goes last, because with the trim_search_range() logic, the last column
+    is the fastest
+    """
+    n = len(free_maxes)
+    if n < 2:
+        return
+    
+    lc = 0  # largest column
+    for i in range(1, n):
+        if free_maxes[i] > free_maxes[lc]:
+            lc = i
+    if lc == n-1:
+        return
+    
+    array_swap(free_maxes, lc, n-1)
+    array_swap(free_vecs, lc, n-1)
+
+
 def is_integer(x):
     return (isinstance(x, int) or
             (isinstance(x, Fraction) and x.denominator == 1))
@@ -638,60 +665,6 @@ def solve_free3(max_values, base_vec, free_vecs):
     return best_sum
 
 
-def joltage_presses(machine, n_free_vars_arg = None):
-
-    # create a matrix representing what lights up when each
-    # button is pressed
-    A = Matrix(height = len(machine.jolts),
-               width = len(machine.buttons) + 1)
-    for c, button in enumerate(machine.buttons):
-        for r in button:
-            A[r][c] = 1
-
-    n_vars = len(machine.buttons)
-    soln_max_values = max_values(A, machine.jolts)
-
-    # augment the matrix with the goal values
-    for r, jolts in enumerate(machine.jolts):
-        A[r][n_vars] = jolts
-        
-    A.row_reduce()
-
-    # remove empty rows at the bottom
-    n_zero_rows = A.count_tail_zero_rows()
-    A.remove_rows(A.height - n_zero_rows, n_zero_rows)
-
-    # list free columns
-    free_cols = find_free_var_columns(A)
-    n_free = len(free_cols)
-    if n_free_vars_arg is not None:
-        n_free_vars_arg[0] = n_free
-
-    # compute the null space
-    # every vector of the form base_vec + k * free_vecs[i]
-    # is a solution to the matrix
-    base_vec, free_vecs = compute_solution_vectors(A, free_cols)
-        
-    assert len(free_vecs) == n_free
-
-    # subset of soln_max_values just for the free columns
-    # this is our search space
-    free_maxes = [soln_max_values[free_cols[i]] for i in range(n_free)]
-
-    # specialize the solution for how many free variables there are
-    if n_free == 0:
-        soln = A.column(-1)[:n_vars]
-        soln_size = sum(soln)
-    elif n_free == 1:
-        soln_size = solve_free1(free_maxes[0], base_vec, free_vecs[0])
-    elif n_free == 2:
-        soln_size = solve_free2(free_maxes, base_vec, free_vecs)
-    else:
-        soln_size = solve_free3(free_maxes, base_vec, free_vecs)
-
-    return soln_size
-
-
 def joltage_presses_init(machine):
     """
     Start the computation, to the point where the number of free variables
@@ -741,6 +714,8 @@ def joltage_presses_finish(machine, A, free_cols, free_maxes):
     # is a solution to the matrix
     base_vec, free_vecs = compute_solution_vectors(A, free_cols)
 
+    largest_axis_last(free_maxes, free_vecs)
+    
     n_free = len(free_cols)
     n_vars = len(machine.buttons)
 
@@ -756,6 +731,13 @@ def joltage_presses_finish(machine, A, free_cols, free_maxes):
 
     return soln_size
 
+
+def joltage_presses(machine, n_free_vars_arg = None):
+    A, free_cols, free_maxes = joltage_presses_init(machine)
+    if n_free_vars_arg:
+        n_free_vars_arg[0] = len(free_cols)
+    return joltage_presses_finish(machine, A, free_cols, free_maxes)
+    
         
 def part2(machines):
     total_presses = 0
@@ -1314,11 +1296,11 @@ def main(args):
     t0 = time.perf_counter_ns()
     # part1(machines)
     t1 = time.perf_counter_ns()
-    # part2(machines)
+    part2(machines)
     # part2_threaded(machines, n_threads)
     # part2_time_each_problem(machines, 10)
     # part2_single_problem(machines[23], 50)
-    part2_threaded_large_ones(machines, n_threads)
+    # part2_threaded_large_ones(machines, n_threads)
     t2 = time.perf_counter_ns()
     # print(f'part1 {(t1-t0)/1e6:.2f} millis')
     print(f'part2 {(t2-t1)/1e6:.2f} millis')
