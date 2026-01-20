@@ -938,10 +938,217 @@ def count_set_bits(x):
     return count
 
 
+class MyFraction:
+    """
+    An alternative to Fraction, implmented in Python so it can be compiled
+    with numba.
+    """
+    def __init__(self, *args):
+        self.numerator = 0
+        self.denominator = 1
+        
+        if len(args) == 1:
+            arg = args[0]
+            if isinstance(arg, int):
+                self.numerator = arg
+            elif isinstance(arg, float):
+                self.numerator, self.denominator = arg.as_integer_ratio()
+            else:
+                raise TypeError(arg)
+            
+        elif len(args) == 2:
+            if isinstance(args[0], int):
+                if isinstance(args[1], int):
+                    if args[1] == 0:
+                        raise ZeroDivisionError
+                    self.numerator = args[0]
+                    self.denominator = args[1]
+
+                elif isinstance(args[1], MyFraction):
+                    if args[1].numerator == 0:
+                        raise ZeroDivisionError
+                    self.numerator = args[0] * args[1].denominator
+                    self.denominator = args[1].numerator
+
+                else:
+                    raise TypeError(args)
+                
+            elif isinstance(args[0], MyFraction):
+                if isinstance(args[1], int):
+                    if args[1] == 0:
+                        raise ZeroDivisionError
+                    self.numerator = args[0].numerator
+                    self.denominator = args[0].denominator * args[1]
+
+                elif isinstance(args[1], MyFraction):
+                    if args[1].numerator == 0:
+                        raise ZeroDivisionError
+                    self.numerator = args[0].numerator * args[1].denominator
+                    self.denominator = args[0].denominator * args[1].numerator
+
+                else:
+                    raise TypeError(args)
+                
+            else:
+                raise TypeError(args)
+
+            self.reduce()
+            
+        else:
+            raise TypeError(args)
+
+    def __repr__(self):
+        return f'MyFraction({self.numerator},{self.denominator})'
+
+    def __str__(self):
+        if self.denominator == 1:
+            return str(self.numerator)
+        else:
+            return f'{self.numerator}/{self.denominator}'
+
+    def __eq__(self, that):
+        return (self.numerator == that.numerator
+                and self.denominator == that.denominator)
+
+    def __lt__(self, that):
+        return (self.numerator * that.denominator
+                < that.numerator * self.denominator)
+
+    def __gt__(self, that):
+        return (self.numerator * that.denominator
+                > that.numerator * self.denominator)
+
+    def __le__(self, that):
+        return (self.numerator * that.denominator
+                <= that.numerator * self.denominator)
+
+    def __ge__(self, that):
+        return (self.numerator * that.denominator
+                >= that.numerator * self.denominator)
+
+    def __bool__(self):
+        return self.numerator != 0
+
+    def __int__(self):
+        return self.numerator // self.denominator
+
+    def __float__(self):
+        return self.numerator / self.denominator
+
+    def __add__(self, that):
+        if isinstance(that, MyFraction):
+            n = (self.numerator * that.denominator
+                 + that.numerator * self.denominator)
+            d = self.denominator * that.denominator
+            return MyFraction(n, d)
+            
+        elif isinstance(that, int):
+            return MyFraction(self.numerator + that * self.denominator,
+                              self.denominator)
+            
+        else:
+            # raise TypeError(that)
+            return NotImplemented
+
+    def __radd__(self, that):
+        return self.__add__(that)
+
+    def __iadd__(self, that):  # self += that
+        if isinstance(that, MyFraction):
+            n = (self.numerator * that.denominator
+                 + that.numerator * self.denominator)
+            d = self.denominator * that.denominator
+            self.numerator = n
+            self.denominator = d
+            self.reduce()
+            return self
+            
+        elif isinstance(that, int):
+            self.numerator += that * self.denominator
+            return self
+            
+        else:
+            # raise TypeError(that)
+            return NotImplemented    
+
+    def __mul__(self, that):
+        if isinstance(that, MyFraction):
+            n = self.numerator * that.numerator
+            d = self.denominator * that.denominator
+            return MyFraction(n, d)
+            
+        elif isinstance(that, int):
+            return MyFraction(self.numerator * that, self.denominator)
+            
+        else:
+            # raise TypeError(that)
+            return NotImplemented
+
+    def __rmul__(self, that):
+        return self.__mul__(that)
+
+    def __imul__(self, that):  # self *= that
+        if isinstance(that, MyFraction):
+            self.numerator *= that.numerator
+            self.denominator *= that.denominator
+            self.reduce()
+            return self
+            
+        elif isinstance(that, int):
+            self.numerator *= that
+            self.reduce()
+            return self
+            
+        else:
+            # raise TypeError(that)
+            return NotImplemented
+
+    def __truediv__(self, divisor):
+        if isinstance(divisor, int):
+            return MyFraction(self.numerator, self.denominator * divisor)
+
+        elif isinstance(divisor, MyFraction):
+            return MyFraction(self.numerator * divisor.denominator,
+                              self.denominator * divisor.numerator)
+
+    def __rtruediv__(self, dividend):
+        # print(f'rtruediv called with {dividend!r} / {self!r}')
+
+        if isinstance(dividend, int):
+            return MyFraction(self.denominator * dividend, self.numerator)
+
+        raise NotImplemented
+
+    def reciprocal(self):
+        if self.numerator == 0:
+            raise ZeroDivisionError
+        return MyFraction(self.denominator, self.numerator)
+
+    def __neg__(self):
+        return MyFraction(-self.numerator, self.denominator)
+
+    def __abs__(self):
+        return MyFraction(abs(self.numerator), self.denominator)
+        
+    def reduce(self):
+        if self.denominator < 0:
+            self.numerator = -self.numerator
+            self.denominator = -self.denominator
+
+        if self.denominator == 1:
+            return
+        
+        # will numba choke on math.gcd?
+        g = math.gcd(self.numerator, self.denominator)
+        if g != 1:
+            self.numerator //= g
+            self.denominator //= g
+
+
 class Matrix:
     """
     Simple matrix library, designed for use with integers and
-    fractions.Fraction objects.
+    MyFraction objects.
     """
     
     def __init__(self, input_matrix = None, height = 1, width = 1):
@@ -1009,7 +1216,8 @@ class Matrix:
             assert self.has_leading_zeros(r, c)
 
             if self.rows[r][c] != 1:
-                factor = Fraction(1, self.rows[r][c])
+                # factor = 1 / self.rows[r][c]
+                factor = MyFraction(1, self.rows[r][c])
                 self.mult_row(r, factor)
                 if VERBOSE:
                     print(f'Normalize leading entry row {r}')
@@ -1092,9 +1300,9 @@ class Matrix:
             x = row[i] * factor
             
             # normalize to integer
-            # Fraction.is_integer added in version 3.12
-            # if isinstance(x, Fraction) and x.is_integer():
-            if isinstance(x, Fraction) and x.denominator == 1:
+            # MyFraction.is_integer added in version 3.12
+            # if isinstance(x, MyFraction) and x.is_integer():
+            if isinstance(x, MyFraction) and x.denominator == 1:
                 x = x.numerator
                 
             row[i] = x
@@ -1106,7 +1314,7 @@ class Matrix:
             x = dest_row[i] + factor * src_row[i]
 
             # normalize to integer
-            if isinstance(x, Fraction) and x.denominator == 1:
+            if isinstance(x, MyFraction) and x.denominator == 1:
                 x = x.numerator
 
             dest_row[i] = x
@@ -1197,7 +1405,7 @@ def matrix_row_reduce(matrix):
      0 1 0 z2
      0 0 1 z3]
   
-    Each cell is an integer or a fractions.Fraction
+    Each cell is an integer or a MyFraction
     """
     height = len(matrix)
     width = len(matrix[0])
@@ -1220,7 +1428,7 @@ def matrix_row_reduce(matrix):
             x = row[i] * factor
             
             # normalize to integer
-            if isinstance(x, Fraction) and x.is_integer():
+            if isinstance(x, MyFraction) and x.is_integer():
                 x = x.numerator
                 
             row[i] = x
@@ -1232,7 +1440,7 @@ def matrix_row_reduce(matrix):
             dest_row[i] += factor * src_row[i]
 
             # normalize to integer
-            if isinstance(dest_row[i], Fraction) and dest_row[i].is_integer():
+            if isinstance(dest_row[i], MyFraction) and dest_row[i].is_integer():
                 dest_row[i] = dest_row[i].numerator
 
     def swap_rows(matrix, r1, r2):
@@ -1265,7 +1473,7 @@ def matrix_row_reduce(matrix):
         assert has_leading_zeros(matrix, r, c)
 
         if matrix[r][c] != 1:
-            factor = Fraction(1, matrix[r][c])
+            factor = MyFraction(1, matrix[r][c])
             mult_row(matrix, r, factor)
             if VERBOSE:
                 print(f'Normalize leading entry row {r}')
@@ -1295,7 +1503,7 @@ def matrix_row_reduce(matrix):
     # for diag_idx in range(height):
     # for diag_idx in range(height):
     #     # make the leading element 1 in this row
-    #     factor = Fraction(1, matrix[diag_idx][diag_idx])
+    #     factor = MyFraction(1, matrix[diag_idx][diag_idx])
     #     mult_row(matrix, diag_idx, factor)
         
     #     print(f'simplify row {diag_idx}')
@@ -1324,7 +1532,7 @@ def matrix_solve(matrix):
      0 1 0 z2
      0 0 1 z3]
   
-    Each cell is an integer or a fractions.Fraction
+    Each cell is an integer or a MyFraction
     """
     height = len(matrix)
     width = len(matrix[0])
@@ -1348,7 +1556,7 @@ def matrix_solve(matrix):
     # for diag_idx in range(height):
     for diag_idx in range(height):
         # make the leading element 1 in this row
-        factor = Fraction(1, matrix[diag_idx][diag_idx])
+        factor = MyFraction(1, matrix[diag_idx][diag_idx])
         mult_row(matrix, diag_idx, factor)
         
         # print(f'simplify row {diag_idx}')

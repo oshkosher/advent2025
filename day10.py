@@ -50,7 +50,7 @@ from math import floor, ceil
 import threading
 from queue import Queue
 
-from viztracer import log_sparse, get_tracer
+# from viztracer import log_sparse, get_tracer
 
 # linear programming library
 # import pulp
@@ -401,11 +401,11 @@ def largest_axis_last(free_maxes, free_vecs):
 
 def is_integer(x):
     return (isinstance(x, int) or
-            (isinstance(x, Fraction) and x.denominator == 1))
+            (isinstance(x, MyFraction) and x.denominator == 1))
 
             
 def fract_to_int(v):
-    if isinstance(v, Fraction) and v.denominator == 1:
+    if isinstance(v, MyFraction) and v.denominator == 1:
         return v.numerator
     else:
         return v
@@ -413,7 +413,7 @@ def fract_to_int(v):
 
 def apply_fract_to_int(vec):
     for i in range(len(vec)):
-        if isinstance(vec[i], Fraction) and vec[i].denominator == 1:
+        if isinstance(vec[i], MyFraction) and vec[i].denominator == 1:
             vec[i] = vec[i].numerator
 
 
@@ -739,11 +739,25 @@ def joltage_presses(machine, n_free_vars_arg = None):
     return joltage_presses_finish(machine, A, free_cols, free_maxes)
     
         
-def part2(machines):
+def part2(machines, verbose = False):
+
+    if verbose:
+        print('\t'.join(['idx', 'n_free', 'mx_size', 'n_press']))
+    
     total_presses = 0
     for i, machine in enumerate(machines):
-        with log_event_name_only(f'#{i}'):
-            total_presses += joltage_presses(machine)
+
+        # with log_event_name_only(f'#{i}'):
+        
+        A, free_cols, free_maxes = joltage_presses_init(machine)
+        press_count = joltage_presses_finish(machine, A, free_cols, free_maxes)
+        total_presses += press_count
+
+        if verbose:
+            n_free = len(free_cols)
+            matrix_size = f'{len(machine.jolts)}x{len(machine.buttons)}'
+            print(f'{i}\t{n_free}\t{matrix_size}\t{press_count}')
+        
     print(total_presses)
 
 
@@ -936,27 +950,15 @@ def part2_time_each_problem(machines, iter_count = 10):
     total_presses = 0
     n_free_holder = [0]
     table = []
+    best_times_sum = 0
 
     print('\t'.join(['idx', 'usec', 'n_free', 'mx_size', 'n_press']))
         
     for i, machine in enumerate(machines):
-        # nanos = time.perf_counter_ns()
-        # press_count = joltage_presses(machine, n_free_vars)
-
-        # press_count = joltage_presses_split(machine)
-        # A, free_cols, free_maxes = joltage_presses_init(machine)
-        # press_count = joltage_presses_finish(machine, A, free_cols, free_maxes)
-        # n_free_vars[0] = len(free_cols)
-        
-        # total_presses += press_count
-        # best_time = time.perf_counter_ns() - nanos
 
         best_time = math.inf
         for _ in range(iter_count):
             nanos = time.perf_counter_ns()
-            
-            # press_count = joltage_presses(machine, n_free_holder)
-            # n_free = n_free_holder[0]
 
             A, free_cols, free_maxes = joltage_presses_init(machine)
             press_count = joltage_presses_finish(machine, A, free_cols,
@@ -969,6 +971,7 @@ def part2_time_each_problem(machines, iter_count = 10):
 
         total_presses += press_count
         matrix_size = f'{len(machine.jolts)}x{len(machine.buttons)}'
+        best_times_sum += best_time
         
         print(f'{i}\t{best_time//1000}\t{n_free}'
               f'\t{matrix_size}\t{press_count}')
@@ -980,6 +983,8 @@ def part2_time_each_problem(machines, iter_count = 10):
         
     # sys.stdout.write('\n')
     # table.sort()
+
+    print(f'sum of best times: {best_times_sum/1e6:.2f} ms')
 
     """
     cumulative_us = 0
@@ -1261,26 +1266,19 @@ def part2_threaded_large_ones(machines, n_threads):
 
     print(total_sum)
 
+
+def test_fractions():
+    a = MyFraction(4, 15)
+    b = MyFraction(1, 3)
+    c = MyFraction(10, a)
+    print(f'{10} / {a} = {c}')
+
+    sys.exit(0)
+
     
 def main(args):
     filename = 'day10.in'
     n_threads = 3
-
-    while len(args) > 0 and args[0][0] == '-':
-        if args[0] == '-t':
-            if len(args) < 2:
-                print('No argument for -t option')
-                return 1
-            try:
-                n_threads = int(args[1])
-            except ValueError:
-                print(f'Invalid thread count: {args[1]}')
-                return 1
-            del args[:2]
-            
-        else:
-            print(f'Unrecognized argument: {args[0]}')
-            return 1
 
     if len(args) > 1:
         print('Extra command line arguments (expecting a filename or nothing)')
@@ -1288,13 +1286,15 @@ def main(args):
     
     if len(args) > 0:
         filename = args[0]
+
+    # test_fractions()
             
     # read input as a list of strings
     input = read_problem_input(filename)
     machines = [Machine.parse(line, idx) for idx, line in enumerate(input)]
   
     t0 = time.perf_counter_ns()
-    # part1(machines)
+    part1(machines)
     t1 = time.perf_counter_ns()
     part2(machines)
     # part2_threaded(machines, n_threads)
@@ -1302,7 +1302,7 @@ def main(args):
     # part2_single_problem(machines[23], 50)
     # part2_threaded_large_ones(machines, n_threads)
     t2 = time.perf_counter_ns()
-    # print(f'part1 {(t1-t0)/1e6:.2f} millis')
+    print(f'part1 {(t1-t0)/1e6:.2f} millis')
     print(f'part2 {(t2-t1)/1e6:.2f} millis')
     
     
