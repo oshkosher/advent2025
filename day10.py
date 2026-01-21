@@ -417,7 +417,7 @@ def apply_fract_to_int(vec):
             vec[i] = vec[i].numerator
 
 
-def compute_solution_vectors(A, free_cols):
+def compute_solution_vectors(A, scale, free_cols):
     """
     A: RREF augmented matrix
     free_cols: list of free columns
@@ -458,7 +458,7 @@ def compute_solution_vectors(A, free_cols):
         for r in range(n):
             if r in free_cols:
                 if r == c:
-                    v[r] = 1
+                    v[r] = scale
                 else:
                     v[r] = 0
             else:
@@ -546,9 +546,29 @@ def vec_add_mult_sum_ints(v, dv, k):
 
     assert is_integer(s)
     return fract_to_int(s)
+
+
+def vec_add_mult_sum_divisible(v, dv, k, divisor):
+    """
+    Checks if all entries in (v + k dv) are divisible by divisor.
+    If so, return their sum / divisor.
+    Otherwise return None.
+    """
+    if divisor == 1:
+        return vec_add_mult_sum_ints(v, dv, k)
+    
+    s = 0
+    for i in range(len(v)):
+        x = v[i] + k * dv[i]
+        # print(f'  v[{i}] = {x}')
+        if x % divisor != 0:
+            return None
+        s += x
+
+    return s // divisor
         
 
-def solve_free1(max_value, base_vec, free_vec):
+def solve_free1(max_value, base_vec, free_vec, scale):
     """
     Solve a system with one free variable.
     base_vec: null space base vector
@@ -562,8 +582,10 @@ def solve_free1(max_value, base_vec, free_vec):
     
     search_range = trim_search_range(base_vec, free_vec, 0, max_value)
     for k in search_range:
-        s = vec_add_mult_sum_ints(base_vec, free_vec, k)
+        # s = vec_add_mult_sum_ints(base_vec, free_vec, k)
+        s = vec_add_mult_sum_divisible(base_vec, free_vec, k, scale)
         if s:
+            # print(f'  {k=} {s=}')
             return s
         
     return 0
@@ -613,19 +635,12 @@ def solve_free2_visual(max_values, base_vec, free_vecs):
     return best_soln
 
 
-def solve_free2(max_values, vectors):
+def solve_free2(max_values, vectors, scale):
     """
     Solve a system with two free variables.
     """
     n = len(vectors[0])
     w = [0] * n
-
-    """
-    print('solve_free2_v2')
-    print(vectors[0])
-    print(vectors[1])
-    print(vectors[2])
-    """
     
     best_sum = math.inf
 
@@ -634,7 +649,7 @@ def solve_free2(max_values, vectors):
         search_range = trim_search_range(w, vectors[2], 0, max_values[1])
         
         for c in search_range:
-            s = vec_add_mult_sum_ints(w, vectors[2], c)
+            s = vec_add_mult_sum_divisible(w, vectors[2], c, scale)
             if s is not None:
                 # print(s)
                 if s < best_sum:
@@ -644,7 +659,7 @@ def solve_free2(max_values, vectors):
     return best_sum
 
 
-def solve_free3(max_values, vectors):
+def solve_free3(max_values, vectors, scale):
     """
     Solve a system with three free variables.
     The input doesn't contain anything larger than three.
@@ -663,7 +678,8 @@ def solve_free3(max_values, vectors):
             search_range = trim_search_range(v1, vectors[3], 0, max_values[2])
 
             for k2 in search_range:
-                s = vec_add_mult_sum_ints(v1, vectors[3], k2)
+                # s = vec_add_mult_sum_ints(v1, vectors[3], k2)
+                s = vec_add_mult_sum_divisible(v1, vectors[3], k2, scale)
                 if s:
                     if s < best_sum:
                         best_sum = s
@@ -672,12 +688,42 @@ def solve_free3(max_values, vectors):
     return best_sum
 
 
+def gen_matrix_denominators(matrix):
+    """
+    Generates all the denominators of elements in matrix.
+    """
+    for row in matrix:
+        for cell in row:
+            if isinstance(cell, MyFraction):
+                yield cell.denominator
+            else:
+                yield 1
+
+                
+def make_matrix_integers(matrix):
+    """
+    If the matrix contains any MyFraction values, scale up the matrix
+    by the least common multiple of their denominators and return that LCM.
+    Otherwise do nothing and return 1.
+    """
+    lcm = math.lcm(*list(gen_matrix_denominators(matrix)))
+    if lcm != 1:
+        # print(f'scale by {lcm}')
+        for row in matrix:
+            for i in range(len(row)):
+                row[i] = int(row[i] * lcm)
+    return lcm
+
+
 def joltage_presses_init(machine):
     """
     Start the computation, to the point where the number of free variables
     is computed.
 
-    returns A, free_cols, free_maxes
+    If the elments in A was multiplied by a scale factor to make every
+    entry an integer, scale will be that value, otherwise 1.
+
+    returns A, scale, free_cols, free_maxes
     """
     # create a matrix representing what lights up when each
     # button is pressed
@@ -700,6 +746,9 @@ def joltage_presses_init(machine):
     n_zero_rows = A.count_tail_zero_rows()
     A.remove_rows(A.height - n_zero_rows, n_zero_rows)
 
+    # scale = 1
+    scale = make_matrix_integers(A)
+
     # list free columns
     free_cols = find_free_var_columns(A)
 
@@ -708,10 +757,10 @@ def joltage_presses_init(machine):
     free_maxes = [soln_max_values[free_cols[i]]
                   for i in range(len(free_cols))]
         
-    return A, free_cols, free_maxes
+    return A, scale, free_cols, free_maxes
 
 
-def joltage_presses_finish(machine, A, free_cols, free_maxes):
+def joltage_presses_finish(machine, A, scale, free_cols, free_maxes):
     """
     Compute the null space and solve the problem. 
     """
@@ -719,7 +768,9 @@ def joltage_presses_finish(machine, A, free_cols, free_maxes):
     # compute the null space
     # every vector of the form base_vec + k * free_vecs[i]
     # is a solution to the matrix
-    vectors = compute_solution_vectors(A, free_cols)
+    vectors = compute_solution_vectors(A, scale, free_cols)
+    # for v in vectors:
+    #     print(v)
 
     largest_axis_last(free_maxes, vectors)
     
@@ -730,20 +781,20 @@ def joltage_presses_finish(machine, A, free_cols, free_maxes):
         soln = A.column(-1)[:n_vars]
         soln_size = sum(soln)
     elif n_free == 1:
-        soln_size = solve_free1(free_maxes[0], vectors[0], vectors[1])
+        soln_size = solve_free1(free_maxes[0], vectors[0], vectors[1], scale)
     elif n_free == 2:
-        soln_size = solve_free2(free_maxes, vectors)
+        soln_size = solve_free2(free_maxes, vectors, scale)
     else:
-        soln_size = solve_free3(free_maxes, vectors)
+        soln_size = solve_free3(free_maxes, vectors, scale)
 
     return soln_size
 
 
 def joltage_presses(machine, n_free_vars_arg = None):
-    A, free_cols, free_maxes = joltage_presses_init(machine)
+    A, scale, free_cols, free_maxes = joltage_presses_init(machine)
     if n_free_vars_arg:
         n_free_vars_arg[0] = len(free_cols)
-    return joltage_presses_finish(machine, A, free_cols, free_maxes)
+    return joltage_presses_finish(machine, A, scale, free_cols, free_maxes)
     
         
 def part2(machines, verbose = False):
@@ -756,8 +807,9 @@ def part2(machines, verbose = False):
 
         # with log_event_name_only(f'#{i}'):
         
-        A, free_cols, free_maxes = joltage_presses_init(machine)
-        press_count = joltage_presses_finish(machine, A, free_cols, free_maxes)
+        A, scale, free_cols, free_maxes = joltage_presses_init(machine)
+        press_count = joltage_presses_finish(machine, A, scale,
+                                             free_cols, free_maxes)
         total_presses += press_count
 
         if verbose:
@@ -967,8 +1019,8 @@ def part2_time_each_problem(machines, iter_count = 10):
         for _ in range(iter_count):
             nanos = time.perf_counter_ns()
 
-            A, free_cols, free_maxes = joltage_presses_init(machine)
-            press_count = joltage_presses_finish(machine, A, free_cols,
+            A, scale, free_cols, free_maxes = joltage_presses_init(machine)
+            press_count = joltage_presses_finish(machine, A, scale, free_cols,
                                                  free_maxes)
             n_free = len(free_cols)
             
@@ -1240,7 +1292,7 @@ def part2_threaded_large_ones(machines, n_threads):
 
     n_offloaded = 0
     for machine in machines:
-        matrix, free_cols, free_maxes = joltage_presses_init(machine)
+        matrix, scale, free_cols, free_maxes = joltage_presses_init(machine)
 
         # put anything with more than two free columns on the large_machine_q
         if len(free_cols) > 2:
@@ -1250,8 +1302,8 @@ def part2_threaded_large_ones(machines, n_threads):
         else:
             # compute directly
             with log_event_name_only(f'#{machine.idx}'):
-                press_count = joltage_presses_finish(machine, matrix, free_cols,
-                                                     free_maxes)
+                press_count = joltage_presses_finish(machine, matrix, scale,
+                                                     free_cols, free_maxes)
             # print(f'machine {machine.idx}: {press_count}')
             total_sum += press_count
 
@@ -1303,9 +1355,9 @@ def main(args):
     t0 = time.perf_counter_ns()
     part1(machines)
     t1 = time.perf_counter_ns()
-    part2(machines)
+    part2(machines, False)
     # part2_threaded(machines, n_threads)
-    # part2_time_each_problem(machines, 10)
+    # part2_time_each_problem(machines, 50)
     # part2_single_problem(machines[23], 50)
     # part2_threaded_large_ones(machines, n_threads)
     t2 = time.perf_counter_ns()
