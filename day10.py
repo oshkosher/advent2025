@@ -378,7 +378,7 @@ def array_swap(a, i1, i2):
     a[i2] = tmp
 
 
-def largest_axis_last(free_maxes, free_vecs):
+def largest_axis_last(free_maxes, vectors):
     """
     Rearrange the columns so the column with the largest free_max value
     goes last, because with the trim_search_range() logic, the last column
@@ -396,7 +396,7 @@ def largest_axis_last(free_maxes, free_vecs):
         return
     
     array_swap(free_maxes, lc, n-1)
-    array_swap(free_vecs, lc, n-1)
+    array_swap(vectors, lc+1, n)
 
 
 def is_integer(x):
@@ -422,12 +422,12 @@ def compute_solution_vectors(A, free_cols):
     A: RREF augmented matrix
     free_cols: list of free columns
 
-    Returns a 2-tuple:
-      0: base vector of length A.width-1
-      1: list of (len(free_cols)+1) free vectors, each of length A.width-1
+    Returns a list of len(free_cols)+1 vectors
+      vector 0: base vector
+      vectors 1..len(free_cols): free vectors
 
     All solution vectors are linear combinations of base and the free vectors.
-    For example: result[0] + 2*result[1][0] + 5*result[1][1]
+    For example: result[0] + 2*result[1] + 5*result[2]
     """
 
     # length of each vector == length of solution vector
@@ -436,22 +436,23 @@ def compute_solution_vectors(A, free_cols):
     n_empty_rows = A.count_tail_zero_rows()
     n_non_empty_rows = A.height - n_empty_rows
 
-    base = A.column(-1)[:n_non_empty_rows]
-    for c in free_cols:
-        base[c:c] = [0]
+    vectors = [[0] * n for _ in range(len(free_cols)+1)]
 
-    # print(f'base_vec={base!r}')
+    # compute base vector
+    last_col = A.column(-1)
+    base = vectors[0]
+    wi = 0  # write index
+    for ri in range(n_non_empty_rows):
+        while wi in free_cols:
+            base[wi] = 0
+            wi += 1
+        base[wi] = last_col[ri]
+        wi += 1
 
-    if len(base) != n:
-        print(f'bad base len, expected {n}, got {len(base)}')
-        A.print()
-    
-    assert len(base) == n
-
-    free_vecs = []
-    for c in free_cols:
+    for vi, c in enumerate(free_cols):
         assert A.height <= A.width-1
-        v = [0] * n
+
+        v = vectors[vi+1]
 
         read_r = 0
         for r in range(n):
@@ -463,12 +464,10 @@ def compute_solution_vectors(A, free_cols):
             else:
                 v[r] = -A[read_r][c]
                 read_r += 1
-        
-        free_vecs.append(v)
 
         # print(f'free_vec[{c}] = {v!r}')
 
-    return base, free_vecs
+    return vectors
 
 
 def add_scaled_vector(dest, src, v, factor = 1):
@@ -614,22 +613,30 @@ def solve_free2_visual(max_values, base_vec, free_vecs):
     return best_soln
 
 
-def solve_free2(max_values, base_vec, free_vecs):
+def solve_free2(max_values, vectors):
     """
     Solve a system with two free variables.
     """
-    v = [0] * len(base_vec)
-    w = [0] * len(base_vec)
+    n = len(vectors[0])
+    w = [0] * n
 
+    """
+    print('solve_free2_v2')
+    print(vectors[0])
+    print(vectors[1])
+    print(vectors[2])
+    """
+    
     best_sum = math.inf
 
     for r in range(max_values[0]+1):
-        add_scaled_vector(w, base_vec, free_vecs[0], r)
-        search_range = trim_search_range(w, free_vecs[1], 0, max_values[1])
+        add_scaled_vector(w, vectors[0], vectors[1], r)
+        search_range = trim_search_range(w, vectors[2], 0, max_values[1])
         
         for c in search_range:
-            s = vec_add_mult_sum_ints(w, free_vecs[1], c)
+            s = vec_add_mult_sum_ints(w, vectors[2], c)
             if s is not None:
+                # print(s)
                 if s < best_sum:
                     best_sum = s
                 break
@@ -637,26 +644,26 @@ def solve_free2(max_values, base_vec, free_vecs):
     return best_sum
 
 
-def solve_free3(max_values, base_vec, free_vecs):
+def solve_free3(max_values, vectors):
     """
     Solve a system with three free variables.
     The input doesn't contain anything larger than three.
     """
-    assert len(free_vecs) == 3 and len(max_values) == 3
-    v0 = [0] * len(base_vec)
-    v1 = [0] * len(base_vec)
+    assert len(vectors) == 4 and len(max_values) == 3
+    v0 = [0] * len(vectors[0])
+    v1 = [0] * len(vectors[0])
 
     best_sum = math.inf
 
     for k0 in range(max_values[0]+1):
-        add_scaled_vector(v0, base_vec, free_vecs[0], k0)
+        add_scaled_vector(v0, vectors[0], vectors[1], k0)
         for k1 in range(max_values[1]+1):
-            add_scaled_vector(v1, v0, free_vecs[1], k1)
+            add_scaled_vector(v1, v0, vectors[2], k1)
             
-            search_range = trim_search_range(v1, free_vecs[2], 0, max_values[2])
+            search_range = trim_search_range(v1, vectors[3], 0, max_values[2])
 
             for k2 in search_range:
-                s = vec_add_mult_sum_ints(v1, free_vecs[2], k2)
+                s = vec_add_mult_sum_ints(v1, vectors[3], k2)
                 if s:
                     if s < best_sum:
                         best_sum = s
@@ -712,9 +719,9 @@ def joltage_presses_finish(machine, A, free_cols, free_maxes):
     # compute the null space
     # every vector of the form base_vec + k * free_vecs[i]
     # is a solution to the matrix
-    base_vec, free_vecs = compute_solution_vectors(A, free_cols)
+    vectors = compute_solution_vectors(A, free_cols)
 
-    largest_axis_last(free_maxes, free_vecs)
+    largest_axis_last(free_maxes, vectors)
     
     n_free = len(free_cols)
     n_vars = len(machine.buttons)
@@ -723,11 +730,11 @@ def joltage_presses_finish(machine, A, free_cols, free_maxes):
         soln = A.column(-1)[:n_vars]
         soln_size = sum(soln)
     elif n_free == 1:
-        soln_size = solve_free1(free_maxes[0], base_vec, free_vecs[0])
+        soln_size = solve_free1(free_maxes[0], vectors[0], vectors[1])
     elif n_free == 2:
-        soln_size = solve_free2(free_maxes, base_vec, free_vecs)
+        soln_size = solve_free2(free_maxes, vectors)
     else:
-        soln_size = solve_free3(free_maxes, base_vec, free_vecs)
+        soln_size = solve_free3(free_maxes, vectors)
 
     return soln_size
 
@@ -1085,7 +1092,7 @@ def joltage_presses_instrumented(machine, timers):
     # compute the null space
     # every vector of the form base_vec + k * free_vecs[i]
     # is a solution to the matrix
-    base_vec, free_vecs = compute_solution_vectors(A, free_cols)
+    base_vec, free_vecs = compute_solution_vectors_orig(A, free_cols)
     timers.null_space.end()
         
     assert len(free_vecs) == n_free
@@ -1201,7 +1208,7 @@ def enqueue_large_machine(large_machine_q, machine, n_threads, matrix,
     machine.init_threaded_soln(free_maxes, n_threads)
 
     machine.base_vec, machine.free_vecs = \
-        compute_solution_vectors(matrix, free_cols)
+        compute_solution_vectors_orig(matrix, free_cols)
 
     end = free_maxes[0]
     for range_start in range(0, end+1, machine.search_chunk_size):

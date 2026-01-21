@@ -1300,8 +1300,6 @@ class Matrix:
             x = row[i] * factor
             
             # normalize to integer
-            # MyFraction.is_integer added in version 3.12
-            # if isinstance(x, MyFraction) and x.is_integer():
             if isinstance(x, MyFraction) and x.denominator == 1:
                 x = x.numerator
                 
