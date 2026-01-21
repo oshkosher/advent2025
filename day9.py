@@ -10,8 +10,8 @@ Ed Karrels, ed.karrels@gmail.com, December 2025
 
 # common standard libraries
 import sys, os, re, itertools, math, collections, itertools, array
-from PIL import Image, ImageDraw
-from draw_grid import draw_grid
+# from PIL import Image, ImageDraw
+# from draw_grid import draw_grid
 
 # change to the directory of the script so relative references work
 from pathlib import Path
